@@ -194,6 +194,11 @@ npx wrangler d1 create oudeluck-pedigree-builder
 npx wrangler r2 bucket create oudeluck-pedigree-uploads
 
 npm run db:migrate:remote               # applies schema.sql to the D1 database
+npm run db:seed:remote                  # optional — same sample pedigrees as
+                                         # npm run db:seed, on the live database,
+                                         # so there's something to click through
+                                         # on first login without spending API
+                                         # credits on a test upload
 
 npx wrangler secret put ANTHROPIC_API_KEY
 # -> paste your key when prompted
