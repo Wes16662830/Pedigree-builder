@@ -7,6 +7,7 @@ import { birdsRouter } from './routes/birds.js';
 import { mergeRouter } from './routes/merge.js';
 import { crossrefRouter } from './routes/crossref.js';
 import { exportRouter } from './routes/export.js';
+import { settingsRouter } from './routes/settings.js';
 import './db.js'; // ensures schema is applied on startup
 
 const app = express();
@@ -25,6 +26,7 @@ app.use('/api/birds', birdsRouter);
 app.use('/api/merge', mergeRouter);
 app.use('/api/crossref', crossrefRouter);
 app.use('/api/pedigrees', exportRouter);
+app.use('/api/settings', settingsRouter);
 
 // Multer / general error fallback — keeps failures as JSON instead of an
 // HTML stack trace leaking to the frontend.

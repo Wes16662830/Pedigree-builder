@@ -246,3 +246,24 @@ export function getChildPedigree(id: string): ChildPedigreeRow | undefined {
 export function getAllChildPedigrees(): ChildPedigreeRow[] {
   return db.prepare('SELECT * FROM child_pedigrees ORDER BY created_at DESC').all() as ChildPedigreeRow[];
 }
+
+// ---- settings ---------------------------------------------------------------
+// Free-form key/value store. Currently used for the user-supplied Anthropic
+// API key entered on the Settings page (see server/lib/anthropic.ts) — kept
+// generic in case other per-install settings show up later.
+
+export function getSetting(key: string): string | undefined {
+  const row = db.prepare('SELECT value FROM settings WHERE key = ?').get(key) as { value: string } | undefined;
+  return row?.value;
+}
+
+export function setSetting(key: string, value: string): void {
+  db.prepare(
+    `INSERT INTO settings (key, value) VALUES (?, ?)
+     ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+  ).run(key, value);
+}
+
+export function deleteSetting(key: string): void {
+  db.prepare('DELETE FROM settings WHERE key = ?').run(key);
+}

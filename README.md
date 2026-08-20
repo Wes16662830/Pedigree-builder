@@ -22,14 +22,16 @@ where the API key comes from differs.
 
 ```bash
 npm install
-cp .env.example .env   # add your ANTHROPIC_API_KEY
 npm run db:seed        # optional — seeds ZA 2805, ZA 2818, ZA 2911, and a
                         # small "The 404" fixture, so the app has real data
                         # to browse without needing a scan on hand yet
 npm run dev             # runs the Vite frontend (5173) + Express API (8787)
 ```
 
-Open http://localhost:5173.
+Open http://localhost:5173, then go to **Settings** and paste in your
+Anthropic API key (or skip that and `cp .env.example .env` instead, if you'd
+rather set it once as an environment variable — either works, see
+[Where the API key lives](#where-the-api-key-lives)).
 
 ## Pipeline
 
@@ -165,7 +167,7 @@ extraction rules, same UI. What changes going to Cloudflare:
 | Backend | Express, a long-running Node process | Workers (Hono), one request at a time, no persistent process |
 | Database | `better-sqlite3` → `data/birds.db` on disk | D1 (Cloudflare's managed SQLite) |
 | Uploaded scans | Saved to `data/uploads/` on disk | Saved to an R2 bucket |
-| API key | `.env` (`ANTHROPIC_API_KEY`) | a Worker secret (`wrangler secret put`) — still never reaches the browser |
+| API key | pasted into the Settings page, or `.env` (`ANTHROPIC_API_KEY`) | pasted into the Settings page (stored in D1), or a Worker secret as a fallback — either way, never reaches the browser |
 | Who can reach it | only you, it's on your machine | **anyone who has the URL, unless you gate it** — see below |
 
 **That last row is the one that matters.** There is no login built into the
@@ -200,14 +202,29 @@ npm run db:seed:remote                  # optional — same sample pedigrees as
                                          # on first login without spending API
                                          # credits on a test upload
 
-npx wrangler secret put ANTHROPIC_API_KEY
-# -> paste your key when prompted
-
 npm run deploy                          # builds the frontend, then wrangler deploy
 ```
 
-Then set up Cloudflare Access as above. After that, `npm run deploy` is the
-only command you need for future updates.
+Then set up Cloudflare Access as above, open the deployed URL, log in, and
+go to **Settings** → paste in your Anthropic API key. That's it — no
+`wrangler secret put` step needed. (If you'd rather set the key at deploy
+time instead of through the UI, `npx wrangler secret put ANTHROPIC_API_KEY`
+still works as a fallback the Settings page will use until you paste one
+in.)
+
+`npm run deploy` is the only command you need for future updates.
+
+### Where the API key lives
+
+There's a **Settings** page in the app (top nav) where you paste in your
+Anthropic API key — it's saved server-side (the `settings` table, D1 on
+Cloudflare / SQLite locally) and the page only ever shows you back the last
+few characters, never the full key. This is the same trust boundary as an
+`.env` file or a Worker secret: anyone who can run code inside this Worker
+can read it, which is exactly why [Cloudflare Access](#hosting-on-cloudflare)
+gating the whole app to just you matters more than how the key itself is
+stored. If both a Settings-page key and a `.env`/Worker-secret key exist,
+the Settings-page one wins.
 
 ### Local Worker preview
 

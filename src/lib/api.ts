@@ -127,3 +127,21 @@ export function exportPedigreeHtml(id: string, html: string) {
     body: JSON.stringify({ html }),
   });
 }
+
+export interface SettingsInfo {
+  hasApiKey: boolean;
+  apiKeyPreview?: string;
+  source: 'settings' | 'env' | 'none';
+}
+
+export function getSettings(): Promise<SettingsInfo> {
+  return api('/settings');
+}
+
+export function saveApiKey(anthropicApiKey: string): Promise<SettingsInfo> {
+  return api('/settings', { method: 'PUT', body: JSON.stringify({ anthropicApiKey }) });
+}
+
+export function clearApiKey(): Promise<SettingsInfo> {
+  return api('/settings/api-key', { method: 'DELETE' });
+}

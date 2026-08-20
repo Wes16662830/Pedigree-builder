@@ -6,6 +6,7 @@ import VerifyPage from './pages/VerifyPage';
 import MergePage from './pages/MergePage';
 import SheetPage from './pages/SheetPage';
 import CrossReferencePage from './pages/CrossReferencePage';
+import SettingsPage from './pages/SettingsPage';
 
 export type ParentSide = 'sire' | 'dam';
 
@@ -22,7 +23,8 @@ type View =
   | { name: 'verify'; side: ParentSide }
   | { name: 'merge' }
   | { name: 'sheet'; childPedigreeId: string }
-  | { name: 'crossref' };
+  | { name: 'crossref' }
+  | { name: 'settings' };
 
 export default function App() {
   const [view, setView] = useState<View>({ name: 'home' });
@@ -65,6 +67,9 @@ export default function App() {
             </button>
             <button className="hover:underline" onClick={() => setView({ name: 'crossref' })}>
               Cross-reference
+            </button>
+            <button className="hover:underline" onClick={() => setView({ name: 'settings' })}>
+              Settings
             </button>
           </nav>
         </div>
@@ -111,6 +116,8 @@ export default function App() {
         {view.name === 'sheet' && <SheetPage childPedigreeId={view.childPedigreeId} onBack={() => setView({ name: 'home' })} />}
 
         {view.name === 'crossref' && <CrossReferencePage />}
+
+        {view.name === 'settings' && <SettingsPage />}
       </main>
     </div>
   );

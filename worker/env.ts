@@ -5,7 +5,10 @@
 export interface Env {
   DB: D1Database;
   UPLOADS: R2Bucket;
-  ANTHROPIC_API_KEY: string;
+  // Optional fallback — the primary path is pasting a key into the Settings
+  // page, stored in D1 (see worker/lib/anthropic.ts). Setting this via
+  // `wrangler secret put ANTHROPIC_API_KEY` is no longer required.
+  ANTHROPIC_API_KEY?: string;
   PEDIGREE_EXTRACTION_MODEL?: string;
   PEDIGREE_PROSE_MODEL?: string;
 }

@@ -9,11 +9,13 @@
 #      database_id below
 #   3. wrangler r2 bucket create oudeluck-pedigree-uploads
 #   4. wrangler d1 execute oudeluck-pedigree-builder --remote --file=./migrations/0001_init.sql
-#   5. wrangler secret put ANTHROPIC_API_KEY
-#   6. npm run build && wrangler deploy
-#   7. In the Cloudflare dashboard: Zero Trust -> Access -> Applications ->
+#   5. npm run build && wrangler deploy
+#   6. In the Cloudflare dashboard: Zero Trust -> Access -> Applications ->
 #      add this Worker's route, restrict to your own email. This is what
 #      actually keeps it private — nothing below does that on its own.
+#   7. Open the deployed URL, log in, go to Settings, paste in your
+#      Anthropic API key. No `wrangler secret put` needed for this —
+#      see the ANTHROPIC_API_KEY note at the bottom of this file.
 
 name = "oudeluck-pedigree-builder"
 main = "worker/index.ts"
@@ -41,6 +43,8 @@ bucket_name = "oudeluck-pedigree-uploads"
 # PEDIGREE_EXTRACTION_MODEL = "claude-opus-5"
 # PEDIGREE_PROSE_MODEL = "claude-opus-5"
 
-# ANTHROPIC_API_KEY is NOT set here — it's a secret, set once via:
-#   wrangler secret put ANTHROPIC_API_KEY
-# so it never sits in plaintext in this file or in git.
+# ANTHROPIC_API_KEY is NOT set here. The app's Settings page (stored in D1)
+# is the primary way to configure the key — paste it in after your first
+# login, nothing to run in a terminal. `wrangler secret put ANTHROPIC_API_KEY`
+# still works as an optional fallback the app uses until a Settings-page key
+# is saved, if you'd rather set it at deploy time instead.
