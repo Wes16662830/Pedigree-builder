@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   createFolder,
   deleteChildPedigree,
@@ -20,6 +20,14 @@ interface Props {
 const UNFILED = '__unfiled__';
 const ALL = '__all__';
 
+type SortKey = 'newest' | 'oldest' | 'ring';
+
+// Undo window for delete. The row is hidden immediately but the DELETE
+// call itself is deferred until this elapses, so "Undo" is a real cancel
+// (clear the timer) rather than a restore-from-trash that would need its
+// own endpoint.
+const UNDO_WINDOW_MS = 6000;
+
 export default function HomePage({ onNew, onOpen }: Props) {
   const [rows, setRows] = useState<ChildPedigreeListRow[]>();
   const [folders, setFolders] = useState<Folder[]>([]);
@@ -27,6 +35,9 @@ export default function HomePage({ onNew, onOpen }: Props) {
   const [error, setError] = useState<string>();
   const [activeFolder, setActiveFolder] = useState<string>(ALL);
   const [newFolderName, setNewFolderName] = useState('');
+  const [search, setSearch] = useState('');
+  const [sort, setSort] = useState<SortKey>('newest');
+  const [pendingDelete, setPendingDelete] = useState<{ id: string; label: string; timer: ReturnType<typeof setTimeout> }>();
 
   function load() {
     Promise.all([listChildPedigrees(), getFolders(), getAllBirds()])
@@ -39,17 +50,32 @@ export default function HomePage({ onNew, onOpen }: Props) {
   }
 
   useEffect(load, []);
+  useEffect(() => () => pendingDelete && clearTimeout(pendingDelete.timer), [pendingDelete]);
 
-  async function handleDelete(id: string, label: string) {
-    if (!window.confirm(`Delete the pedigree sheet for ${label}? The bird itself and its ancestor data stay on file — only this generated sheet is removed.`)) {
-      return;
-    }
-    try {
-      await deleteChildPedigree(id);
-      setRows((prev) => prev?.filter((r) => r.id !== id));
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Delete failed');
-    }
+  function handleDelete(id: string, label: string) {
+    // Hide immediately, but hold the actual DELETE call for a few seconds
+    // so the button can say "Undo" and mean it.
+    setPendingDelete((prev) => {
+      if (prev) clearTimeout(prev.timer);
+      return prev;
+    });
+    const timer = setTimeout(async () => {
+      try {
+        await deleteChildPedigree(id);
+        setRows((prev) => prev?.filter((r) => r.id !== id));
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Delete failed');
+      } finally {
+        setPendingDelete((cur) => (cur?.id === id ? undefined : cur));
+      }
+    }, UNDO_WINDOW_MS);
+    setPendingDelete({ id, label, timer });
+  }
+
+  function undoDelete() {
+    if (!pendingDelete) return;
+    clearTimeout(pendingDelete.timer);
+    setPendingDelete(undefined);
   }
 
   async function handleMove(id: string, folderId: string) {
@@ -86,11 +112,34 @@ export default function HomePage({ onNew, onOpen }: Props) {
     }
   }
 
-  const visible = rows?.filter((r) => {
-    if (activeFolder === ALL) return true;
-    if (activeFolder === UNFILED) return !r.folder_id;
-    return r.folder_id === activeFolder;
-  });
+  const q = search.trim().toLowerCase();
+
+  const visible = useMemo(() => {
+    let list = rows?.filter((r) => r.id !== pendingDelete?.id);
+    list = list?.filter((r) => {
+      if (activeFolder === ALL) return true;
+      if (activeFolder === UNFILED) return !r.folder_id;
+      return r.folder_id === activeFolder;
+    });
+    if (q) {
+      list = list?.filter((r) => {
+        const bird = birds.get(r.child_bird_id);
+        const hay = `${bird?.ring ?? ''} ${bird?.name ?? ''}`.toLowerCase();
+        return hay.includes(q);
+      });
+    }
+    if (list) {
+      list = [...list].sort((a, b) => {
+        if (sort === 'newest') return b.created_at.localeCompare(a.created_at);
+        if (sort === 'oldest') return a.created_at.localeCompare(b.created_at);
+        const ra = birds.get(a.child_bird_id)?.ring ?? '';
+        const rb = birds.get(b.child_bird_id)?.ring ?? '';
+        return ra.localeCompare(rb);
+      });
+    }
+    return list;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows, activeFolder, q, sort, birds, pendingDelete?.id]);
 
   return (
     <div>
@@ -105,6 +154,29 @@ export default function HomePage({ onNew, onOpen }: Props) {
       </div>
 
       {error && <p className="mb-3 text-sm text-red-600">{error}</p>}
+
+      {pendingDelete && (
+        <div className="mb-3 flex items-center justify-between rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm">
+          <span>Deleted {pendingDelete.label}.</span>
+          <button onClick={undoDelete} className="rounded-md border border-amber-400 bg-white px-2 py-1 text-xs font-medium hover:bg-amber-100">
+            Undo
+          </button>
+        </div>
+      )}
+
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <input
+          className="w-56 rounded border px-2 py-1.5 text-sm"
+          placeholder="Search by ring or name…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+        <select className="rounded border px-2 py-1.5 text-sm text-neutral-600" value={sort} onChange={(e) => setSort(e.target.value as SortKey)}>
+          <option value="newest">Newest first</option>
+          <option value="oldest">Oldest first</option>
+          <option value="ring">Ring (A–Z)</option>
+        </select>
+      </div>
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <button
@@ -165,6 +237,11 @@ export default function HomePage({ onNew, onOpen }: Props) {
             const label = bird ? `${bird.ring}${bird.name ? ` "${bird.name}"` : ''}` : r.child_bird_id;
             return (
               <li key={r.id} className="flex items-center gap-3 px-4 py-3">
+                {bird?.photoUrl ? (
+                  <img src={bird.photoUrl} alt={label} className="h-9 w-9 flex-shrink-0 rounded object-cover" />
+                ) : (
+                  <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded bg-neutral-100 text-[9px] text-neutral-400">no photo</div>
+                )}
                 <button onClick={() => onOpen(r.id)} className="flex-1 text-left hover:underline">
                   <span className="font-mono text-sm">{label}</span>
                 </button>

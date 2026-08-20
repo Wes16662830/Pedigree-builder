@@ -62,6 +62,28 @@ export function setBirdVerified(id: string, verified: boolean): Promise<Bird> {
   return api(`/birds/${id}/verify`, { method: 'POST', body: JSON.stringify({ verified }) });
 }
 
+export function uploadBirdPhoto(id: string, file: File): Promise<{ photoUrl: string }> {
+  const form = new FormData();
+  form.append('photo', file);
+  return api(`/birds/${id}/photo`, { method: 'POST', body: form });
+}
+
+export function deleteBirdPhoto(id: string): Promise<void> {
+  return api(`/birds/${id}/photo`, { method: 'DELETE' });
+}
+
+export interface BirdAppearance {
+  childPedigreeId: string;
+  childBirdId: string;
+  childRing: string;
+  childName?: string;
+  asChild: boolean;
+}
+
+export function getBirdAppearances(id: string): Promise<BirdAppearance[]> {
+  return api(`/birds/${id}/appearances`);
+}
+
 export function completeUploadVerification(uploadId: string, sourceFile: string): Promise<{ ok: true }> {
   return api(`/birds/upload/${uploadId}/complete-verification`, {
     method: 'POST',
@@ -117,6 +139,7 @@ export interface ChildPedigreeDetail {
   dam_upload_id: string | null;
   ring_field_order: string;
   print_variant: string;
+  template: string;
   folder_id: string | null;
   created_at: string;
   updated_at: string;
@@ -172,7 +195,7 @@ export function getInbreeding(birdId: string): Promise<InbreedingResult> {
   return api(`/crossref/inbreeding/${birdId}`);
 }
 
-export function patchPedigree(id: string, patch: { layout?: unknown; ringFieldOrder?: string; printVariant?: string; prose?: unknown }) {
+export function patchPedigree(id: string, patch: { layout?: unknown; ringFieldOrder?: string; printVariant?: string; template?: string; prose?: unknown }) {
   return api(`/pedigrees/${id}`, { method: 'PATCH', body: JSON.stringify(patch) });
 }
 
@@ -183,14 +206,30 @@ export function exportPedigreeHtml(id: string, html: string) {
   });
 }
 
+export interface LoftSettings {
+  name?: string;
+  subtitle?: string;
+  address?: string;
+  logoDataUrl?: string;
+}
+
 export interface SettingsInfo {
   hasApiKey: boolean;
   apiKeyPreview?: string;
   source: 'settings' | 'env' | 'none';
+  loft: LoftSettings;
 }
 
 export function getSettings(): Promise<SettingsInfo> {
   return api('/settings');
+}
+
+export function saveLoftSettings(patch: { loftName?: string; loftSubtitle?: string; loftAddress?: string; loftLogoDataUrl?: string }): Promise<SettingsInfo> {
+  return api('/settings', { method: 'PUT', body: JSON.stringify(patch) });
+}
+
+export function clearLoftLogo(): Promise<SettingsInfo> {
+  return api('/settings/loft-logo', { method: 'DELETE' });
 }
 
 export function saveApiKey(anthropicApiKey: string): Promise<SettingsInfo> {

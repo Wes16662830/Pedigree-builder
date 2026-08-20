@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import PedigreeSheet, { type EditMode, type PrintVariant } from '../components/PedigreeSheet';
-import { getChildPedigree, patchPedigree, exportPedigreeHtml } from '../lib/api';
+import BirdEditor from '../components/BirdEditor';
+import { getChildPedigree, getSettings, patchPedigree, updateBird, exportPedigreeHtml, type LoftSettings } from '../lib/api';
 import type { Bird, PedigreeProse } from '../../shared/types';
 import type { RingFieldOrder } from '../../shared/ring';
 import type { LayoutState } from '../lib/layout';
 import { buildExportHtml, downloadHtml } from '../lib/exportHtml';
+import { TEMPLATES, DEFAULT_TEMPLATE_ID } from '../lib/templates';
 
 interface Props {
   childPedigreeId: string;
@@ -19,6 +21,9 @@ export default function SheetPage({ childPedigreeId, onBack }: Props) {
   const [editMode, setEditMode] = useState<EditMode>('view');
   const [printVariant, setPrintVariant] = useState<PrintVariant>('black-header');
   const [ringFieldOrder, setRingFieldOrder] = useState<RingFieldOrder>('ring-year');
+  const [templateId, setTemplateId] = useState<string>(DEFAULT_TEMPLATE_ID);
+  const [loft, setLoft] = useState<LoftSettings>();
+  const [showChildEditor, setShowChildEditor] = useState(false);
   const [error, setError] = useState<string>();
   const [saving, setSaving] = useState(false);
   const sheetRef = useRef<HTMLDivElement>(null);
@@ -32,8 +37,12 @@ export default function SheetPage({ childPedigreeId, onBack }: Props) {
         setLayout((data.layout as LayoutState) ?? {});
         setRingFieldOrder((data.ring_field_order as RingFieldOrder) ?? 'ring-year');
         setPrintVariant((data.print_variant as PrintVariant) ?? 'black-header');
+        setTemplateId(data.template ?? DEFAULT_TEMPLATE_ID);
       })
       .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load'));
+    getSettings()
+      .then((s) => setLoft(s.loft))
+      .catch(() => {});
   }, [childPedigreeId]);
 
   function onLayoutChange(id: string, patch: Partial<LayoutState[string]>) {
@@ -54,11 +63,31 @@ export default function SheetPage({ childPedigreeId, onBack }: Props) {
     setSaving(true);
     setError(undefined);
     try {
-      await patchPedigree(childPedigreeId, { layout, ringFieldOrder, printVariant });
+      await patchPedigree(childPedigreeId, { layout, ringFieldOrder, printVariant, template: templateId });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Save failed');
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function onTemplateChange(id: string) {
+    setTemplateId(id);
+    try {
+      await patchPedigree(childPedigreeId, { template: id });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Save failed');
+    }
+  }
+
+  async function saveChildEdits(bird: Bird) {
+    setChild(bird);
+    try {
+      await updateBird(bird.id, bird);
+      // Keep the tree in sync in case this same bird also appears there.
+      setTree((prev) => prev.map((b) => (b.id === bird.id ? bird : b)));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Save failed');
     }
   }
 
@@ -99,6 +128,17 @@ export default function SheetPage({ childPedigreeId, onBack }: Props) {
         </div>
 
         <label className="ml-2 flex items-center gap-1 text-sm">
+          Template:
+          <select className="rounded border px-2 py-1" value={templateId} onChange={(e) => onTemplateChange(e.target.value)}>
+            {TEMPLATES.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.label}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="flex items-center gap-1 text-sm">
           Print:
           <select className="rounded border px-2 py-1" value={printVariant} onChange={(e) => setPrintVariant(e.target.value as PrintVariant)}>
             <option value="black-header">Black header</option>
@@ -120,18 +160,28 @@ export default function SheetPage({ childPedigreeId, onBack }: Props) {
           </button>
         )}
 
+        <button onClick={() => setShowChildEditor((v) => !v)} className="rounded-md border px-3 py-1.5 text-sm">
+          {showChildEditor ? 'Hide child editor' : 'Edit child details / results'}
+        </button>
+
         <div className="ml-auto flex gap-2">
           <button disabled={saving} onClick={saveLayout} className="rounded-md border px-3 py-1.5 text-sm disabled:opacity-40">
             {saving ? 'Saving…' : 'Save'}
           </button>
           <button onClick={() => window.print()} className="rounded-md border px-3 py-1.5 text-sm">
-            Print
+            Print / Save as PDF
           </button>
           <button onClick={doExport} className="rounded-md px-3 py-1.5 text-sm font-medium text-white" style={{ background: '#111111' }}>
             Export HTML
           </button>
         </div>
       </div>
+
+      {showChildEditor && (
+        <div className="no-print mb-4 max-w-xl">
+          <BirdEditor bird={child} onSave={saveChildEdits} />
+        </div>
+      )}
 
       <div className="overflow-auto rounded-lg border border-neutral-200 bg-neutral-100 p-6">
         <PedigreeSheet
@@ -143,6 +193,8 @@ export default function SheetPage({ childPedigreeId, onBack }: Props) {
           editMode={editMode}
           printVariant={printVariant}
           ringFieldOrder={ringFieldOrder}
+          templateId={templateId}
+          loft={loft}
           onLayoutChange={onLayoutChange}
           onResetBox={onResetBox}
         />

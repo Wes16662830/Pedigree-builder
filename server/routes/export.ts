@@ -17,7 +17,7 @@ exportRouter.patch('/:id', (req, res) => {
     res.status(404).json({ error: 'Child pedigree not found' });
     return;
   }
-  const { layout, ringFieldOrder, printVariant, prose, folderId } = req.body ?? {};
+  const { layout, ringFieldOrder, printVariant, template, prose, folderId } = req.body ?? {};
   saveChildPedigree({
     id: row.id,
     childBirdId: row.child_bird_id,
@@ -27,6 +27,7 @@ exportRouter.patch('/:id', (req, res) => {
     layout: layout ?? (row.layout_json ? JSON.parse(row.layout_json) : undefined),
     ringFieldOrder: ringFieldOrder ?? row.ring_field_order,
     printVariant: printVariant ?? row.print_variant,
+    template: template ?? row.template,
   });
   // folderId is handled separately (a plain UPDATE, not part of the upsert
   // above) so `undefined` reliably means "not part of this request" while

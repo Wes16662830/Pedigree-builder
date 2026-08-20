@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS birds (
   sire_id           TEXT REFERENCES birds(id),
   dam_id            TEXT REFERENCES birds(id),
   source_file       TEXT,
+  photo_url         TEXT,                        -- /uploads/photos/... — optional, set via POST /api/birds/:id/photo
   confidence        REAL NOT NULL DEFAULT 1,
   verified          INTEGER NOT NULL DEFAULT 0,  -- 0/1, set true only via Phase 2 verification
   created_at        TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
@@ -68,6 +69,7 @@ CREATE TABLE IF NOT EXISTS child_pedigrees (
   layout_json        TEXT,                     -- Phase 4 layout-mode edits (position/scale per box)
   ring_field_order  TEXT NOT NULL DEFAULT 'ring-year' CHECK (ring_field_order IN ('ring-year','year-ring')),
   print_variant     TEXT NOT NULL DEFAULT 'black-header' CHECK (print_variant IN ('black-header','white-panel')),
+  template          TEXT NOT NULL DEFAULT 'classic-gold',  -- src/lib/templates.ts is the source of truth for valid ids
   folder_id         TEXT REFERENCES folders(id),
   created_at        TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
   updated_at        TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))

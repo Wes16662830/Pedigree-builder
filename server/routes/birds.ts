@@ -1,9 +1,33 @@
 import { Router } from 'express';
-import { getAllBirds, getBird, saveBird, deleteBird, getBirdsBySourceFile, setUploadVerified } from '../db.js';
+import multer from 'multer';
+import path from 'node:path';
+import fs from 'node:fs';
+import { randomUUID } from 'node:crypto';
+import { getAllBirds, getBird, saveBird, deleteBird, getBirdsBySourceFile, setUploadVerified, setBirdPhoto, getAllChildPedigrees } from '../db.js';
 import { normaliseRing } from '../../shared/ring.js';
+import { walkTree } from '../lib/merge.js';
 import type { Bird } from '../../shared/types.js';
 
 export const birdsRouter = Router();
+
+const photosDir = path.resolve(process.cwd(), 'data', 'uploads', 'photos');
+fs.mkdirSync(photosDir, { recursive: true });
+
+const PHOTO_MIME = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
+const photoUpload = multer({
+  storage: multer.diskStorage({
+    destination: photosDir,
+    filename: (req, file, cb) => cb(null, `${req.params.id}-${randomUUID()}${path.extname(file.originalname) || ''}`),
+  }),
+  limits: { fileSize: 8 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (!PHOTO_MIME.has(file.mimetype)) {
+      cb(new Error(`Unsupported photo type: ${file.mimetype}. Use PNG, JPEG, WEBP, or GIF.`));
+      return;
+    }
+    cb(null, true);
+  },
+});
 
 birdsRouter.get('/', (_req, res) => {
   res.json(getAllBirds());
@@ -61,6 +85,61 @@ birdsRouter.post('/:id/verify', (req, res) => {
 birdsRouter.delete('/:id', (req, res) => {
   deleteBird(req.params.id);
   res.status(204).end();
+});
+
+// POST /api/birds/:id/photo — one photo per bird, shown on its Bird Library
+// card, in the Pedigrees list thumbnail (for a child bird), and optionally
+// on the rendered sheet.
+birdsRouter.post('/:id/photo', photoUpload.single('photo'), (req, res) => {
+  const bird = getBird(req.params.id);
+  if (!bird) {
+    res.status(404).json({ error: 'Bird not found' });
+    return;
+  }
+  if (!req.file) {
+    res.status(400).json({ error: 'No photo uploaded. Field name must be "photo".' });
+    return;
+  }
+  const photoUrl = `/uploads/photos/${path.basename(req.file.path)}`;
+  setBirdPhoto(bird.id, photoUrl);
+  res.json({ photoUrl });
+});
+
+birdsRouter.delete('/:id/photo', (req, res) => {
+  const bird = getBird(req.params.id);
+  if (!bird) {
+    res.status(404).json({ error: 'Bird not found' });
+    return;
+  }
+  setBirdPhoto(bird.id, null);
+  res.status(204).end();
+});
+
+// GET /api/birds/:id/appearances — which child pedigrees this bird shows up
+// in, whether as the child itself or anywhere in its ancestor tree. Powers
+// the Bird Library's "where does this bird appear" view.
+birdsRouter.get('/:id/appearances', (req, res) => {
+  const birdId = req.params.id;
+  const allBirds = getAllBirds();
+  const index = new Map(allBirds.map((b) => [b.id, b]));
+  const rows = getAllChildPedigrees();
+
+  const appearances = rows
+    .map((row) => {
+      const tree = walkTree(row.child_bird_id, index);
+      if (!tree.some((b) => b.id === birdId)) return null;
+      const child = index.get(row.child_bird_id);
+      return {
+        childPedigreeId: row.id,
+        childBirdId: row.child_bird_id,
+        childRing: child?.ring ?? row.child_bird_id,
+        childName: child?.name,
+        asChild: row.child_bird_id === birdId,
+      };
+    })
+    .filter((x): x is NonNullable<typeof x> => x !== null);
+
+  res.json(appearances);
 });
 
 // POST /api/birds/upload/:uploadId/complete-verification — call once every

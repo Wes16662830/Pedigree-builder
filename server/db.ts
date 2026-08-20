@@ -33,6 +33,21 @@ if (tableExists) {
     db.exec(migration);
     console.log('[db] Migrated child_pedigrees to support folders and reused-bird pairings.');
   }
+
+  // 0004: bird photos + sheet templates — plain ADD COLUMN, no rebuild.
+  const birdColumns = db.prepare('PRAGMA table_info(birds)').all() as { name: string }[];
+  const hasPhotoUrl = birdColumns.some((c) => c.name === 'photo_url');
+  const childPedigreeColumns2 = db.prepare('PRAGMA table_info(child_pedigrees)').all() as { name: string }[];
+  const hasTemplate = childPedigreeColumns2.some((c) => c.name === 'template');
+  // Each statement is guarded independently rather than running
+  // migrations/0004_photos_and_templates.sql verbatim, since re-running
+  // `ALTER TABLE ADD COLUMN` on a column that already exists errors — one
+  // of the two might already be present depending on when this was last run.
+  if (!hasPhotoUrl) db.exec('ALTER TABLE birds ADD COLUMN photo_url TEXT');
+  if (!hasTemplate) db.exec(`ALTER TABLE child_pedigrees ADD COLUMN template TEXT NOT NULL DEFAULT 'classic-gold'`);
+  if (!hasPhotoUrl || !hasTemplate) {
+    console.log('[db] Migrated birds/child_pedigrees to support photos and templates.');
+  }
 }
 
 const schema = fs.readFileSync(path.resolve(__dirname, '..', 'schema.sql'), 'utf-8');
@@ -55,6 +70,7 @@ interface BirdRow {
   sire_id: string | null;
   dam_id: string | null;
   source_file: string | null;
+  photo_url: string | null;
   confidence: number;
   verified: number;
   created_at: string;
@@ -77,6 +93,7 @@ function rowToBird(row: BirdRow): Bird {
     sireId: row.sire_id ?? undefined,
     damId: row.dam_id ?? undefined,
     sourceFile: row.source_file ?? undefined,
+    photoUrl: row.photo_url ?? undefined,
     confidence: row.confidence,
     verified: !!row.verified,
     createdAt: row.created_at,
@@ -177,6 +194,10 @@ export function deleteBird(id: string): void {
   db.prepare('DELETE FROM birds WHERE id = ?').run(id);
 }
 
+export function setBirdPhoto(id: string, photoUrl: string | null): void {
+  db.prepare(`UPDATE birds SET photo_url = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?`).run(photoUrl, id);
+}
+
 // ---- uploads ---------------------------------------------------------------
 
 export interface UploadRow {
@@ -238,6 +259,7 @@ export interface ChildPedigreeRow {
   layout_json: string | null;
   ring_field_order: string;
   print_variant: string;
+  template: string;
   folder_id: string | null;
   created_at: string;
   updated_at: string;
@@ -254,15 +276,18 @@ export function saveChildPedigree(row: {
   layout?: unknown;
   ringFieldOrder?: string;
   printVariant?: string;
+  // src/lib/templates.ts is the source of truth for valid ids.
+  template?: string;
 }): void {
   db.prepare(`
-    INSERT INTO child_pedigrees (id, child_bird_id, sire_upload_id, dam_upload_id, prose_json, layout_json, ring_field_order, print_variant)
-    VALUES (@id, @childBirdId, @sireUploadId, @damUploadId, @proseJson, @layoutJson, @ringFieldOrder, @printVariant)
+    INSERT INTO child_pedigrees (id, child_bird_id, sire_upload_id, dam_upload_id, prose_json, layout_json, ring_field_order, print_variant, template)
+    VALUES (@id, @childBirdId, @sireUploadId, @damUploadId, @proseJson, @layoutJson, @ringFieldOrder, @printVariant, @template)
     ON CONFLICT(id) DO UPDATE SET
       prose_json = excluded.prose_json,
       layout_json = excluded.layout_json,
       ring_field_order = excluded.ring_field_order,
       print_variant = excluded.print_variant,
+      template = excluded.template,
       updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')
   `).run({
     id: row.id,
@@ -273,6 +298,7 @@ export function saveChildPedigree(row: {
     layoutJson: row.layout ? JSON.stringify(row.layout) : null,
     ringFieldOrder: row.ringFieldOrder ?? 'ring-year',
     printVariant: row.printVariant ?? 'black-header',
+    template: row.template ?? 'classic-gold',
   });
 }
 

@@ -22,6 +22,7 @@ interface BirdRow {
   sire_id: string | null;
   dam_id: string | null;
   source_file: string | null;
+  photo_url: string | null;
   confidence: number;
   verified: number;
   created_at: string;
@@ -44,6 +45,7 @@ function rowToBird(row: BirdRow): Bird {
     sireId: row.sire_id ?? undefined,
     damId: row.dam_id ?? undefined,
     sourceFile: row.source_file ?? undefined,
+    photoUrl: row.photo_url ?? undefined,
     confidence: row.confidence,
     verified: !!row.verified,
     createdAt: row.created_at,
@@ -136,6 +138,13 @@ export async function deleteBird(db: D1Database, id: string): Promise<void> {
   await db.prepare('DELETE FROM birds WHERE id = ?').bind(id).run();
 }
 
+export async function setBirdPhoto(db: D1Database, id: string, photoUrl: string | null): Promise<void> {
+  await db
+    .prepare(`UPDATE birds SET photo_url = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?`)
+    .bind(photoUrl, id)
+    .run();
+}
+
 // ---- uploads ---------------------------------------------------------------
 
 export interface UploadRow {
@@ -207,6 +216,7 @@ export interface ChildPedigreeRow {
   layout_json: string | null;
   ring_field_order: string;
   print_variant: string;
+  template: string;
   folder_id: string | null;
   created_at: string;
   updated_at: string;
@@ -225,17 +235,20 @@ export async function saveChildPedigree(
     layout?: unknown;
     ringFieldOrder?: string;
     printVariant?: string;
+    // src/lib/templates.ts is the source of truth for valid ids.
+    template?: string;
   },
 ): Promise<void> {
   await db
     .prepare(
-      `INSERT INTO child_pedigrees (id, child_bird_id, sire_upload_id, dam_upload_id, prose_json, layout_json, ring_field_order, print_variant)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO child_pedigrees (id, child_bird_id, sire_upload_id, dam_upload_id, prose_json, layout_json, ring_field_order, print_variant, template)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
          prose_json = excluded.prose_json,
          layout_json = excluded.layout_json,
          ring_field_order = excluded.ring_field_order,
          print_variant = excluded.print_variant,
+         template = excluded.template,
          updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')`,
     )
     .bind(
@@ -247,6 +260,7 @@ export async function saveChildPedigree(
       row.layout ? JSON.stringify(row.layout) : null,
       row.ringFieldOrder ?? 'ring-year',
       row.printVariant ?? 'black-header',
+      row.template ?? 'classic-gold',
     )
     .run();
 }

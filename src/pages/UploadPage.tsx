@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { extractPedigreeFile, getReusableBirds } from '../lib/api';
 import type { ExtractResponse } from '../lib/api';
 import type { Bird } from '../../shared/types';
+import { normaliseRing } from '../../shared/ring';
 import type { ParentSide, ParentState } from '../App';
 
 interface Props {
@@ -82,14 +83,27 @@ function Dropzone({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const [mode, setMode] = useState<'upload' | 'reuse'>('upload');
+  const [duplicateRings, setDuplicateRings] = useState<string[]>();
   const inputRef = useRef<HTMLInputElement>(null);
 
   async function handleFile(file: File) {
     setBusy(true);
     setError(undefined);
+    setDuplicateRings(undefined);
     try {
       const res = await extractPedigreeFile(file);
       onExtracted(side, res);
+      // Best-effort duplicate check — a bird already on file with the same
+      // ring as one just extracted probably means this scan (or part of
+      // it) was uploaded before. Non-fatal if it fails.
+      try {
+        const existing = await getReusableBirds();
+        const existingRings = new Set(existing.map((b) => normaliseRing(b.ring)));
+        const dupes = res.extracted.birds.map((b) => b.ring).filter((ring) => existingRings.has(normaliseRing(ring)));
+        if (dupes.length) setDuplicateRings([...new Set(dupes)]);
+      } catch {
+        // ignore — duplicate detection is a nice-to-have, not a blocker
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Extraction failed');
     } finally {
@@ -150,6 +164,13 @@ function Dropzone({
 
       {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
 
+      {duplicateRings && duplicateRings.length > 0 && (
+        <div className="mt-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          Already on file: <span className="font-mono">{duplicateRings.join(', ')}</span>. This scan may have been uploaded before — check the Bird
+          Library, or use "Use existing bird" above instead of re-verifying it.
+        </div>
+      )}
+
       {state?.kind === 'upload' && (
         <div className="space-y-2">
           <div className="flex items-center justify-between rounded-md bg-neutral-50 px-3 py-2 text-sm">
@@ -164,7 +185,13 @@ function Dropzone({
               Open verification screen
             </button>
           )}
-          <button onClick={() => onClearSide(side)} className="w-full text-xs text-neutral-500 underline">
+          <button
+            onClick={() => {
+              setDuplicateRings(undefined);
+              onClearSide(side);
+            }}
+            className="w-full text-xs text-neutral-500 underline"
+          >
             Start over
           </button>
         </div>

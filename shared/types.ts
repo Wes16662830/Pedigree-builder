@@ -37,6 +37,7 @@ export interface Bird {
   sireId?: string;
   damId?: string;
   sourceFile?: string; // which upload this came from
+  photoUrl?: string; // /uploads/photos/... — optional, set via POST /api/birds/:id/photo
   confidence: number; // 0–1, from extraction
   verified: boolean; // human confirmed in Phase 2
   createdAt?: string;

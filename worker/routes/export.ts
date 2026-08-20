@@ -10,7 +10,7 @@ exportRouter.patch('/:id', async (c) => {
   const row = await getChildPedigree(c.env.DB, c.req.param('id'));
   if (!row) return c.json({ error: 'Child pedigree not found' }, 404);
   const body = await c.req.json().catch(() => ({}));
-  const { layout, ringFieldOrder, printVariant, prose, folderId } = body ?? {};
+  const { layout, ringFieldOrder, printVariant, template, prose, folderId } = body ?? {};
   await saveChildPedigree(c.env.DB, {
     id: row.id,
     childBirdId: row.child_bird_id,
@@ -20,6 +20,7 @@ exportRouter.patch('/:id', async (c) => {
     layout: layout ?? (row.layout_json ? JSON.parse(row.layout_json) : undefined),
     ringFieldOrder: ringFieldOrder ?? row.ring_field_order,
     printVariant: printVariant ?? row.print_variant,
+    template: template ?? row.template,
   });
   // undefined = "not part of this request"; null = "move to unfiled".
   if (folderId !== undefined) {

@@ -1,5 +1,16 @@
-import { useEffect, useState } from 'react';
-import { clearApiKey, getSettings, saveApiKey, type SettingsInfo } from '../lib/api';
+import { useEffect, useRef, useState } from 'react';
+import { clearApiKey, clearLoftLogo, getSettings, saveApiKey, saveLoftSettings, type SettingsInfo } from '../lib/api';
+
+const MAX_LOGO_BYTES = 1024 * 1024; // must match server/worker MAX_LOGO_BYTES
+
+function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(reader.error ?? new Error('Failed to read file'));
+    reader.readAsDataURL(file);
+  });
+}
 
 export default function SettingsPage() {
   const [info, setInfo] = useState<SettingsInfo>();
@@ -8,9 +19,22 @@ export default function SettingsPage() {
   const [error, setError] = useState<string>();
   const [savedJustNow, setSavedJustNow] = useState(false);
 
+  const [loftName, setLoftName] = useState('');
+  const [loftSubtitle, setLoftSubtitle] = useState('');
+  const [loftAddress, setLoftAddress] = useState('');
+  const [loftBusy, setLoftBusy] = useState(false);
+  const [loftError, setLoftError] = useState<string>();
+  const [loftSavedJustNow, setLoftSavedJustNow] = useState(false);
+  const logoInputRef = useRef<HTMLInputElement>(null);
+
   function load() {
     getSettings()
-      .then(setInfo)
+      .then((s) => {
+        setInfo(s);
+        setLoftName(s.loft.name ?? '');
+        setLoftSubtitle(s.loft.subtitle ?? '');
+        setLoftAddress(s.loft.address ?? '');
+      })
       .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load settings'));
   }
 
@@ -42,6 +66,51 @@ export default function SettingsPage() {
       setError(e instanceof Error ? e.message : 'Failed to clear key');
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function saveLoft() {
+    setLoftBusy(true);
+    setLoftError(undefined);
+    try {
+      const updated = await saveLoftSettings({ loftName, loftSubtitle, loftAddress });
+      setInfo(updated);
+      setLoftSavedJustNow(true);
+      setTimeout(() => setLoftSavedJustNow(false), 3000);
+    } catch (e) {
+      setLoftError(e instanceof Error ? e.message : 'Failed to save loft details');
+    } finally {
+      setLoftBusy(false);
+    }
+  }
+
+  async function onLogoFile(file: File) {
+    if (file.size > MAX_LOGO_BYTES) {
+      setLoftError(`Logo must be under ${Math.round(MAX_LOGO_BYTES / 1024)}KB.`);
+      return;
+    }
+    setLoftBusy(true);
+    setLoftError(undefined);
+    try {
+      const dataUrl = await fileToDataUrl(file);
+      const updated = await saveLoftSettings({ loftLogoDataUrl: dataUrl });
+      setInfo(updated);
+    } catch (e) {
+      setLoftError(e instanceof Error ? e.message : 'Failed to upload logo');
+    } finally {
+      setLoftBusy(false);
+    }
+  }
+
+  async function removeLogo() {
+    setLoftBusy(true);
+    setLoftError(undefined);
+    try {
+      setInfo(await clearLoftLogo());
+    } catch (e) {
+      setLoftError(e instanceof Error ? e.message : 'Failed to remove logo');
+    } finally {
+      setLoftBusy(false);
     }
   }
 
@@ -114,6 +183,77 @@ export default function SettingsPage() {
         </a>
         .
       </p>
+
+      <h2 className="mb-1 mt-10 text-xl font-semibold">Loft branding</h2>
+      <p className="mb-4 text-sm text-neutral-500">
+        Shown in the header of every rendered pedigree sheet. Leave blank to keep the OudeLuck defaults.
+      </p>
+
+      <div className="space-y-3 rounded-lg border border-neutral-200 bg-white p-5">
+        <div className="flex items-center gap-4">
+          {info?.loft.logoDataUrl ? (
+            <img src={info.loft.logoDataUrl} alt="loft logo" className="h-16 w-16 rounded object-cover" />
+          ) : (
+            <div className="flex h-16 w-16 items-center justify-center rounded bg-neutral-100 text-xs text-neutral-400">no logo</div>
+          )}
+          <div className="flex flex-col gap-1">
+            <button
+              onClick={() => logoInputRef.current?.click()}
+              disabled={loftBusy}
+              className="rounded border px-2 py-1 text-xs text-neutral-600 hover:bg-neutral-50 disabled:opacity-40"
+            >
+              {info?.loft.logoDataUrl ? 'Replace logo' : 'Upload logo'}
+            </button>
+            {info?.loft.logoDataUrl && (
+              <button onClick={removeLogo} disabled={loftBusy} className="text-xs text-neutral-400 underline hover:text-red-600 disabled:opacity-40">
+                Remove
+              </button>
+            )}
+            <input
+              ref={logoInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/gif"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) onLogoFile(file);
+              }}
+            />
+          </div>
+        </div>
+
+        <label className="block">
+          <span className="block text-xs text-neutral-500">Loft name</span>
+          <input className="w-full rounded border px-2 py-1.5" placeholder="OudeLuck Lofts" value={loftName} onChange={(e) => setLoftName(e.target.value)} />
+        </label>
+        <label className="block">
+          <span className="block text-xs text-neutral-500">Subtitle</span>
+          <input className="w-full rounded border px-2 py-1.5" placeholder="OneLoft Genetics" value={loftSubtitle} onChange={(e) => setLoftSubtitle(e.target.value)} />
+        </label>
+        <label className="block">
+          <span className="block text-xs text-neutral-500">Address</span>
+          <input
+            className="w-full rounded border px-2 py-1.5"
+            placeholder="Athlone Farm, Tarkastad, Eastern Cape"
+            value={loftAddress}
+            onChange={(e) => setLoftAddress(e.target.value)}
+          />
+        </label>
+
+        <div className="flex items-center gap-2">
+          <button
+            onClick={saveLoft}
+            disabled={loftBusy}
+            className="rounded-md px-4 py-2 text-sm font-medium text-white disabled:opacity-40"
+            style={{ background: '#111111' }}
+          >
+            {loftBusy ? 'Saving…' : 'Save loft details'}
+          </button>
+          {loftSavedJustNow && <span className="text-sm text-green-600">Saved.</span>}
+        </div>
+      </div>
+
+      {loftError && <p className="mt-3 text-sm text-red-600">{loftError}</p>}
     </div>
   );
 }

@@ -8,6 +8,7 @@ import MergePage from './pages/MergePage';
 import SheetPage from './pages/SheetPage';
 import CrossReferencePage from './pages/CrossReferencePage';
 import SettingsPage from './pages/SettingsPage';
+import BirdLibraryPage from './pages/BirdLibraryPage';
 
 export type ParentSide = 'sire' | 'dam';
 
@@ -40,6 +41,7 @@ type View =
   | { name: 'merge' }
   | { name: 'sheet'; childPedigreeId: string }
   | { name: 'crossref' }
+  | { name: 'library' }
   | { name: 'settings' };
 
 export default function App() {
@@ -95,6 +97,9 @@ export default function App() {
             <button className="hover:underline" onClick={() => setView({ name: 'crossref' })}>
               Cross-reference
             </button>
+            <button className="hover:underline" onClick={() => setView({ name: 'library' })}>
+              Bird Library
+            </button>
             <button className="hover:underline" onClick={() => setView({ name: 'settings' })}>
               Settings
             </button>
@@ -148,6 +153,8 @@ export default function App() {
         {view.name === 'sheet' && <SheetPage childPedigreeId={view.childPedigreeId} onBack={() => setView({ name: 'home' })} />}
 
         {view.name === 'crossref' && <CrossReferencePage />}
+
+        {view.name === 'library' && <BirdLibraryPage onOpenPedigree={(childPedigreeId) => setView({ name: 'sheet', childPedigreeId })} />}
 
         {view.name === 'settings' && <SettingsPage />}
       </main>

@@ -11,3 +11,20 @@ export function maskApiKey(key: string): string {
   if (key.length <= 10) return '••••';
   return `${key.slice(0, 7)}...${key.slice(-4)}`;
 }
+
+// Loft branding — used in the sheet header instead of a hardcoded name/logo
+// (see src/components/PedigreeSheet.tsx). All optional; the app falls back
+// to the original OudeLuck placeholder values when unset.
+export const LOFT_NAME_SETTING = 'loft_name';
+export const LOFT_SUBTITLE_SETTING = 'loft_subtitle';
+export const LOFT_ADDRESS_SETTING = 'loft_address';
+// A data: URL — small enough (see the 500KB client-side cap) to store as a
+// plain settings row rather than a separate upload/R2 object.
+export const LOFT_LOGO_SETTING = 'loft_logo_data_url';
+
+export interface LoftSettings {
+  name?: string;
+  subtitle?: string;
+  address?: string;
+  logoDataUrl?: string;
+}
