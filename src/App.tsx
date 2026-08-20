@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { ExtractResponse } from './lib/api';
+import type { Bird } from '../shared/types';
 import HomePage from './pages/HomePage';
 import UploadPage from './pages/UploadPage';
 import VerifyPage from './pages/VerifyPage';
@@ -10,11 +11,26 @@ import SettingsPage from './pages/SettingsPage';
 
 export type ParentSide = 'sire' | 'dam';
 
-export interface ParentUploadState {
-  uploadId: string;
-  fileUrl: string;
-  extracted: ExtractResponse['extracted'];
-  verified: boolean;
+// A side is either mid-flow on a fresh upload (needs verification before
+// it's usable) or an already-verified bird reused from the library —
+// either way, once `ready` is true it can go straight into a merge.
+export type ParentState =
+  | { kind: 'upload'; uploadId: string; fileUrl: string; extracted: ExtractResponse['extracted']; verified: boolean }
+  | { kind: 'reused'; bird: Bird };
+
+// Back-compat alias used by VerifyPage, which only ever deals with the
+// upload variant (you don't "verify" a bird you're reusing — it's already
+// verified, that's what makes it reusable).
+export type ParentUploadState = Extract<ParentState, { kind: 'upload' }>;
+
+export function rootIdOf(p: ParentState): string {
+  return p.kind === 'upload' ? p.extracted.rootBirdId : p.bird.id;
+}
+export function uploadIdOf(p: ParentState): string | undefined {
+  return p.kind === 'upload' ? p.uploadId : undefined;
+}
+export function isReady(p?: ParentState): p is ParentState {
+  return !!p && (p.kind === 'reused' || p.verified);
 }
 
 type View =
@@ -28,8 +44,8 @@ type View =
 
 export default function App() {
   const [view, setView] = useState<View>({ name: 'home' });
-  const [sire, setSire] = useState<ParentUploadState | undefined>();
-  const [dam, setDam] = useState<ParentUploadState | undefined>();
+  const [sire, setSire] = useState<ParentState | undefined>();
+  const [dam, setDam] = useState<ParentState | undefined>();
 
   function reset() {
     setSire(undefined);
@@ -38,17 +54,28 @@ export default function App() {
   }
 
   function onExtracted(side: ParentSide, res: ExtractResponse) {
-    const state: ParentUploadState = { uploadId: res.uploadId, fileUrl: res.fileUrl, extracted: res.extracted, verified: false };
+    const state: ParentState = { kind: 'upload', uploadId: res.uploadId, fileUrl: res.fileUrl, extracted: res.extracted, verified: false };
+    if (side === 'sire') setSire(state);
+    else setDam(state);
+  }
+
+  function onReused(side: ParentSide, bird: Bird) {
+    const state: ParentState = { kind: 'reused', bird };
     if (side === 'sire') setSire(state);
     else setDam(state);
   }
 
   function onVerified(side: ParentSide) {
-    if (side === 'sire') setSire((s) => (s ? { ...s, verified: true } : s));
-    else setDam((d) => (d ? { ...d, verified: true } : d));
+    if (side === 'sire') setSire((s) => (s && s.kind === 'upload' ? { ...s, verified: true } : s));
+    else setDam((d) => (d && d.kind === 'upload' ? { ...d, verified: true } : d));
   }
 
-  const bothReady = !!sire?.verified && !!dam?.verified;
+  function clearSide(side: ParentSide) {
+    if (side === 'sire') setSire(undefined);
+    else setDam(undefined);
+  }
+
+  const bothReady = isReady(sire) && isReady(dam);
 
   return (
     <div className="min-h-screen bg-neutral-50 text-neutral-900">
@@ -92,22 +119,27 @@ export default function App() {
             sire={sire}
             dam={dam}
             onExtracted={onExtracted}
+            onReused={onReused}
+            onClearSide={clearSide}
             onVerify={(side) => setView({ name: 'verify', side })}
             onContinueToMerge={() => setView({ name: 'merge' })}
           />
         )}
 
-        {view.name === 'verify' && (sire || dam) && (
-          <VerifyPage
-            side={view.side}
-            state={view.side === 'sire' ? sire : dam}
-            onDone={() => {
-              onVerified(view.side);
-              setView({ name: 'upload' });
-            }}
-            onCancel={() => setView({ name: 'upload' })}
-          />
-        )}
+        {view.name === 'verify' && (() => {
+          const state = view.side === 'sire' ? sire : dam;
+          return state?.kind === 'upload' ? (
+            <VerifyPage
+              side={view.side}
+              state={state}
+              onDone={() => {
+                onVerified(view.side);
+                setView({ name: 'upload' });
+              }}
+              onCancel={() => setView({ name: 'upload' })}
+            />
+          ) : null;
+        })()}
 
         {view.name === 'merge' && bothReady && sire && dam && (
           <MergePage sire={sire} dam={dam} onMerged={(childPedigreeId) => setView({ name: 'sheet', childPedigreeId })} />

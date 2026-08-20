@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import type { Sex } from '../../shared/types';
 import { mergePedigrees } from '../lib/api';
-import type { ParentUploadState } from '../App';
+import type { ParentState } from '../App';
+import { rootIdOf, uploadIdOf } from '../App';
 
 interface Props {
-  sire: ParentUploadState;
-  dam: ParentUploadState;
+  sire: ParentState;
+  dam: ParentState;
   onMerged: (childPedigreeId: string) => void;
 }
 
@@ -28,8 +29,8 @@ export default function MergePage({ sire, dam, onMerged }: Props) {
     setError(undefined);
     try {
       const result = await mergePedigrees({
-        sireUploadId: sire.uploadId,
-        damUploadId: dam.uploadId,
+        sire: { rootId: rootIdOf(sire), uploadId: uploadIdOf(sire) },
+        dam: { rootId: rootIdOf(dam), uploadId: uploadIdOf(dam) },
         child: { ring: ring.trim(), name: name || undefined, sex, colour: colour || undefined, breeder: breeder || undefined, loftAddress: loftAddress || undefined },
       });
       onMerged(result.childPedigreeId);

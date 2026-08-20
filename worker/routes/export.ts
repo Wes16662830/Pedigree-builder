@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { getChildPedigree, saveChildPedigree, getBird } from '../db.js';
+import { getChildPedigree, saveChildPedigree, getBird, setChildPedigreeFolder } from '../db.js';
 import type { Env } from '../env.js';
 
 export const exportRouter = new Hono<{ Bindings: Env }>();
@@ -10,17 +10,21 @@ exportRouter.patch('/:id', async (c) => {
   const row = await getChildPedigree(c.env.DB, c.req.param('id'));
   if (!row) return c.json({ error: 'Child pedigree not found' }, 404);
   const body = await c.req.json().catch(() => ({}));
-  const { layout, ringFieldOrder, printVariant, prose } = body ?? {};
+  const { layout, ringFieldOrder, printVariant, prose, folderId } = body ?? {};
   await saveChildPedigree(c.env.DB, {
     id: row.id,
     childBirdId: row.child_bird_id,
-    sireUploadId: row.sire_upload_id,
-    damUploadId: row.dam_upload_id,
+    sireUploadId: row.sire_upload_id ?? undefined,
+    damUploadId: row.dam_upload_id ?? undefined,
     prose: prose ?? JSON.parse(row.prose_json),
     layout: layout ?? (row.layout_json ? JSON.parse(row.layout_json) : undefined),
     ringFieldOrder: ringFieldOrder ?? row.ring_field_order,
     printVariant: printVariant ?? row.print_variant,
   });
+  // undefined = "not part of this request"; null = "move to unfiled".
+  if (folderId !== undefined) {
+    await setChildPedigreeFolder(c.env.DB, row.id, folderId);
+  }
   return c.json({ ok: true });
 });
 

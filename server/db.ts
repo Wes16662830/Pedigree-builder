@@ -16,6 +16,25 @@ export const db = new Database(DB_PATH);
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 
+// schema.sql uses CREATE TABLE IF NOT EXISTS, so it's a no-op against a
+// birds.db from before folders/reuse existed — child_pedigrees there still
+// has the old (NOT NULL upload ids, no folder_id) shape. Detect that and
+// apply the same rebuild as migrations/0003_folders_and_reuse.sql, BEFORE
+// schema.sql runs (schema.sql's `CREATE INDEX ... (folder_id)` would fail
+// against the old shape otherwise). Only relevant when child_pedigrees
+// already exists — a brand new database file has nothing to migrate, and
+// schema.sql below creates it fresh in the new shape directly.
+const tableExists = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='child_pedigrees'").get();
+if (tableExists) {
+  const childPedigreeColumns = db.prepare('PRAGMA table_info(child_pedigrees)').all() as { name: string }[];
+  const hasFolderId = childPedigreeColumns.some((c) => c.name === 'folder_id');
+  if (!hasFolderId) {
+    const migration = fs.readFileSync(path.resolve(__dirname, '..', 'migrations', '0003_folders_and_reuse.sql'), 'utf-8');
+    db.exec(migration);
+    console.log('[db] Migrated child_pedigrees to support folders and reused-bird pairings.');
+  }
+}
+
 const schema = fs.readFileSync(path.resolve(__dirname, '..', 'schema.sql'), 'utf-8');
 db.exec(schema);
 
@@ -198,12 +217,13 @@ export function setUploadVerified(id: string, verified: boolean): void {
 export interface ChildPedigreeRow {
   id: string;
   child_bird_id: string;
-  sire_upload_id: string;
-  dam_upload_id: string;
+  sire_upload_id: string | null;
+  dam_upload_id: string | null;
   prose_json: string;
   layout_json: string | null;
   ring_field_order: string;
   print_variant: string;
+  folder_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -211,8 +231,10 @@ export interface ChildPedigreeRow {
 export function saveChildPedigree(row: {
   id: string;
   childBirdId: string;
-  sireUploadId: string;
-  damUploadId: string;
+  // Nullable — a side reusing an already-verified bird has no fresh upload
+  // of its own (see server/lib/merge.ts).
+  sireUploadId?: string;
+  damUploadId?: string;
   prose: unknown;
   layout?: unknown;
   ringFieldOrder?: string;
@@ -230,8 +252,8 @@ export function saveChildPedigree(row: {
   `).run({
     id: row.id,
     childBirdId: row.childBirdId,
-    sireUploadId: row.sireUploadId,
-    damUploadId: row.damUploadId,
+    sireUploadId: row.sireUploadId ?? null,
+    damUploadId: row.damUploadId ?? null,
     proseJson: JSON.stringify(row.prose ?? {}),
     layoutJson: row.layout ? JSON.stringify(row.layout) : null,
     ringFieldOrder: row.ringFieldOrder ?? 'ring-year',
@@ -245,6 +267,48 @@ export function getChildPedigree(id: string): ChildPedigreeRow | undefined {
 
 export function getAllChildPedigrees(): ChildPedigreeRow[] {
   return db.prepare('SELECT * FROM child_pedigrees ORDER BY created_at DESC').all() as ChildPedigreeRow[];
+}
+
+// Removes the sheet/certificate row only — deliberately does NOT touch the
+// underlying bird/ancestor data, which stays available for cross-referencing
+// and for reuse as a parent in a future pairing (that's the whole point of
+// storing every bird from every upload — see build brief §5 Phase 5).
+export function deleteChildPedigree(id: string): void {
+  db.prepare('DELETE FROM child_pedigrees WHERE id = ?').run(id);
+}
+
+export function setChildPedigreeFolder(id: string, folderId: string | null): void {
+  db.prepare(`UPDATE child_pedigrees SET folder_id = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?`).run(folderId, id);
+}
+
+// ---- folders ---------------------------------------------------------------
+
+export interface FolderRow {
+  id: string;
+  name: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export function getAllFolders(): FolderRow[] {
+  return db.prepare('SELECT * FROM folders ORDER BY name COLLATE NOCASE').all() as FolderRow[];
+}
+
+export function createFolder(id: string, name: string): FolderRow {
+  db.prepare('INSERT INTO folders (id, name) VALUES (?, ?)').run(id, name);
+  return db.prepare('SELECT * FROM folders WHERE id = ?').get(id) as FolderRow;
+}
+
+export function renameFolder(id: string, name: string): void {
+  db.prepare(`UPDATE folders SET name = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?`).run(name, id);
+}
+
+// Deletes the folder only — pedigrees inside it fall back to "unfiled"
+// (folder_id becomes NULL via ON DELETE behaviour we implement explicitly
+// here, since SQLite's default FK action is NO ACTION).
+export function deleteFolder(id: string): void {
+  db.prepare('UPDATE child_pedigrees SET folder_id = NULL WHERE folder_id = ?').run(id);
+  db.prepare('DELETE FROM folders WHERE id = ?').run(id);
 }
 
 // ---- settings ---------------------------------------------------------------

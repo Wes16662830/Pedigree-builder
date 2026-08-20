@@ -187,12 +187,13 @@ export async function setUploadVerified(db: D1Database, id: string, verified: bo
 export interface ChildPedigreeRow {
   id: string;
   child_bird_id: string;
-  sire_upload_id: string;
-  dam_upload_id: string;
+  sire_upload_id: string | null;
+  dam_upload_id: string | null;
   prose_json: string;
   layout_json: string | null;
   ring_field_order: string;
   print_variant: string;
+  folder_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -202,8 +203,10 @@ export async function saveChildPedigree(
   row: {
     id: string;
     childBirdId: string;
-    sireUploadId: string;
-    damUploadId: string;
+    // Nullable — a side reusing an already-verified bird has no fresh
+    // upload of its own (see worker/lib/merge.ts).
+    sireUploadId?: string;
+    damUploadId?: string;
     prose: unknown;
     layout?: unknown;
     ringFieldOrder?: string;
@@ -224,8 +227,8 @@ export async function saveChildPedigree(
     .bind(
       row.id,
       row.childBirdId,
-      row.sireUploadId,
-      row.damUploadId,
+      row.sireUploadId ?? null,
+      row.damUploadId ?? null,
       JSON.stringify(row.prose ?? {}),
       row.layout ? JSON.stringify(row.layout) : null,
       row.ringFieldOrder ?? 'ring-year',
@@ -242,6 +245,50 @@ export async function getChildPedigree(db: D1Database, id: string): Promise<Chil
 export async function getAllChildPedigrees(db: D1Database): Promise<ChildPedigreeRow[]> {
   const { results } = await db.prepare('SELECT * FROM child_pedigrees ORDER BY created_at DESC').all<ChildPedigreeRow>();
   return results;
+}
+
+// Removes the sheet/certificate row only — the underlying bird/ancestor
+// data stays available for cross-referencing and reuse (see server/db.ts's
+// deleteChildPedigree comment — same reasoning applies here).
+export async function deleteChildPedigree(db: D1Database, id: string): Promise<void> {
+  await db.prepare('DELETE FROM child_pedigrees WHERE id = ?').bind(id).run();
+}
+
+export async function setChildPedigreeFolder(db: D1Database, id: string, folderId: string | null): Promise<void> {
+  await db
+    .prepare(`UPDATE child_pedigrees SET folder_id = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?`)
+    .bind(folderId, id)
+    .run();
+}
+
+// ---- folders ---------------------------------------------------------------
+
+export interface FolderRow {
+  id: string;
+  name: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export async function getAllFolders(db: D1Database): Promise<FolderRow[]> {
+  const { results } = await db.prepare('SELECT * FROM folders ORDER BY name COLLATE NOCASE').all<FolderRow>();
+  return results;
+}
+
+export async function createFolder(db: D1Database, id: string, name: string): Promise<FolderRow> {
+  await db.prepare('INSERT INTO folders (id, name) VALUES (?, ?)').bind(id, name).run();
+  const row = await db.prepare('SELECT * FROM folders WHERE id = ?').bind(id).first<FolderRow>();
+  return row!;
+}
+
+export async function renameFolder(db: D1Database, id: string, name: string): Promise<void> {
+  await db.prepare(`UPDATE folders SET name = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?`).bind(name, id).run();
+}
+
+// Deletes the folder only — pedigrees inside it fall back to "unfiled".
+export async function deleteFolder(db: D1Database, id: string): Promise<void> {
+  await db.prepare('UPDATE child_pedigrees SET folder_id = NULL WHERE folder_id = ?').bind(id).run();
+  await db.prepare('DELETE FROM folders WHERE id = ?').bind(id).run();
 }
 
 // ---- settings ---------------------------------------------------------------

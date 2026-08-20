@@ -45,8 +45,10 @@ export interface MergeInput {
     breeder?: string;
     loftAddress?: string;
   };
-  sireUploadId: string;
-  damUploadId: string;
+  // Present only when this side came from a fresh upload this session —
+  // reusing an already-verified bird on file has no upload of its own.
+  sireUploadId?: string;
+  damUploadId?: string;
 }
 
 export interface MergeResult {

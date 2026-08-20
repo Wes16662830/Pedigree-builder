@@ -42,20 +42,38 @@ CREATE TABLE IF NOT EXISTS uploads (
   updated_at        TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
 
--- A finished child sheet: two verified parent uploads merged, with generated
+-- Named groupings for the Pedigrees list — purely organisational, no
+-- behaviour hangs off which folder a pedigree is in.
+CREATE TABLE IF NOT EXISTS folders (
+  id                TEXT PRIMARY KEY,
+  name              TEXT NOT NULL,
+  created_at        TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+  updated_at        TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+);
+
+-- A finished child sheet: two verified parent trees merged, with generated
 -- prose. `prose_json` holds a PedigreeProse object.
+--
+-- sire_upload_id/dam_upload_id are nullable: a side only has an `uploads`
+-- row when it came from a fresh scan extraction this time. Reusing a bird
+-- already on file (a previous upload's root, or an earlier merge's child)
+-- as a parent has no upload of its own — the bird itself being `verified`
+-- is what the merge gates on either way (see server/lib/merge.ts).
 CREATE TABLE IF NOT EXISTS child_pedigrees (
   id                TEXT PRIMARY KEY,
   child_bird_id     TEXT NOT NULL REFERENCES birds(id),
-  sire_upload_id    TEXT NOT NULL REFERENCES uploads(id),
-  dam_upload_id     TEXT NOT NULL REFERENCES uploads(id),
+  sire_upload_id    TEXT REFERENCES uploads(id),
+  dam_upload_id     TEXT REFERENCES uploads(id),
   prose_json        TEXT NOT NULL DEFAULT '{}',
   layout_json        TEXT,                     -- Phase 4 layout-mode edits (position/scale per box)
   ring_field_order  TEXT NOT NULL DEFAULT 'ring-year' CHECK (ring_field_order IN ('ring-year','year-ring')),
   print_variant     TEXT NOT NULL DEFAULT 'black-header' CHECK (print_variant IN ('black-header','white-panel')),
+  folder_id         TEXT REFERENCES folders(id),
   created_at        TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
   updated_at        TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
 );
+
+CREATE INDEX IF NOT EXISTS idx_child_pedigrees_folder ON child_pedigrees(folder_id);
 
 CREATE TABLE IF NOT EXISTS settings (
   key   TEXT PRIMARY KEY,

@@ -12,6 +12,7 @@ import { mergeRouter } from './routes/merge.js';
 import { crossrefRouter } from './routes/crossref.js';
 import { exportRouter } from './routes/export.js';
 import { settingsRouter } from './routes/settings.js';
+import { foldersRouter } from './routes/folders.js';
 import type { Env } from './env.js';
 
 const app = new Hono<{ Bindings: Env }>();
@@ -24,6 +25,7 @@ app.route('/api/merge', mergeRouter);
 app.route('/api/crossref', crossrefRouter);
 app.route('/api/pedigrees', exportRouter);
 app.route('/api/settings', settingsRouter);
+app.route('/api/folders', foldersRouter);
 
 // Serves uploaded scans and exported sheets back out of R2 — the Worker
 // equivalent of Express's `app.use('/uploads', express.static(...))`.

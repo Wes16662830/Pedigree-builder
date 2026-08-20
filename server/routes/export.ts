@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import fs from 'node:fs';
 import path from 'node:path';
-import { getChildPedigree, saveChildPedigree, getBird } from '../db.js';
+import { getChildPedigree, saveChildPedigree, getBird, setChildPedigreeFolder } from '../db.js';
 
 export const exportRouter = Router();
 
@@ -17,17 +17,23 @@ exportRouter.patch('/:id', (req, res) => {
     res.status(404).json({ error: 'Child pedigree not found' });
     return;
   }
-  const { layout, ringFieldOrder, printVariant, prose } = req.body ?? {};
+  const { layout, ringFieldOrder, printVariant, prose, folderId } = req.body ?? {};
   saveChildPedigree({
     id: row.id,
     childBirdId: row.child_bird_id,
-    sireUploadId: row.sire_upload_id,
-    damUploadId: row.dam_upload_id,
+    sireUploadId: row.sire_upload_id ?? undefined,
+    damUploadId: row.dam_upload_id ?? undefined,
     prose: prose ?? JSON.parse(row.prose_json),
     layout: layout ?? (row.layout_json ? JSON.parse(row.layout_json) : undefined),
     ringFieldOrder: ringFieldOrder ?? row.ring_field_order,
     printVariant: printVariant ?? row.print_variant,
   });
+  // folderId is handled separately (a plain UPDATE, not part of the upsert
+  // above) so `undefined` reliably means "not part of this request" while
+  // `null` means "move to unfiled" — folderId?: string | null in the body.
+  if (folderId !== undefined) {
+    setChildPedigreeFolder(row.id, folderId);
+  }
   res.json({ ok: true });
 });
 

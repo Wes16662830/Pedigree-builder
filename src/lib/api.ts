@@ -69,9 +69,18 @@ export function completeUploadVerification(uploadId: string, sourceFile: string)
   });
 }
 
+// A side is either a freshly uploaded+verified pedigree (uploadId present,
+// kept for provenance) or a bird already on file being reused as-is —
+// either way rootId must point at an already-`verified` bird (the server
+// checks this; see server/routes/merge.ts).
+export interface MergeSideInput {
+  rootId: string;
+  uploadId?: string;
+}
+
 export interface MergeInput {
-  sireUploadId: string;
-  damUploadId: string;
+  sire: MergeSideInput;
+  dam: MergeSideInput;
   child: { ring: string; name?: string; sex?: Bird['sex']; colour?: string; breeder?: string; loftAddress?: string };
 }
 
@@ -86,17 +95,29 @@ export function mergePedigrees(input: MergeInput): Promise<MergeResult> {
   return api('/merge', { method: 'POST', body: JSON.stringify(input) });
 }
 
+export interface ChildPedigreeListRow {
+  id: string;
+  child_bird_id: string;
+  folder_id: string | null;
+  created_at: string;
+}
+
 export function listChildPedigrees() {
-  return api<{ id: string; child_bird_id: string; created_at: string }[]>('/merge');
+  return api<ChildPedigreeListRow[]>('/merge');
+}
+
+export function deleteChildPedigree(id: string): Promise<void> {
+  return api(`/merge/${id}`, { method: 'DELETE' });
 }
 
 export interface ChildPedigreeDetail {
   id: string;
   child_bird_id: string;
-  sire_upload_id: string;
-  dam_upload_id: string;
+  sire_upload_id: string | null;
+  dam_upload_id: string | null;
   ring_field_order: string;
   print_variant: string;
+  folder_id: string | null;
   created_at: string;
   updated_at: string;
   prose: PedigreeProse;
@@ -107,6 +128,40 @@ export interface ChildPedigreeDetail {
 
 export function getChildPedigree(id: string): Promise<ChildPedigreeDetail> {
   return api(`/merge/${id}`);
+}
+
+// Birds already on file that can be reused as a parent for a new pairing
+// without re-uploading/re-extracting a scan — anything `verified`.
+export async function getReusableBirds(): Promise<Bird[]> {
+  const birds = await getAllBirds();
+  return birds.filter((b) => b.verified).sort((a, b) => a.ring.localeCompare(b.ring));
+}
+
+export interface Folder {
+  id: string;
+  name: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export function getFolders(): Promise<Folder[]> {
+  return api('/folders');
+}
+
+export function createFolder(name: string): Promise<Folder> {
+  return api('/folders', { method: 'POST', body: JSON.stringify({ name }) });
+}
+
+export function renameFolder(id: string, name: string): Promise<{ ok: true }> {
+  return api(`/folders/${id}`, { method: 'PATCH', body: JSON.stringify({ name }) });
+}
+
+export function deleteFolder(id: string): Promise<void> {
+  return api(`/folders/${id}`, { method: 'DELETE' });
+}
+
+export function moveChildPedigreeToFolder(id: string, folderId: string | null): Promise<{ ok: true }> {
+  return api(`/pedigrees/${id}`, { method: 'PATCH', body: JSON.stringify({ folderId }) });
 }
 
 export function getCrossReference(): Promise<CrossReferenceReport> {

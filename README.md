@@ -89,6 +89,25 @@ upload 2 files → vision extract → HUMAN VERIFY → merge into child → rend
    verification before it can be merged or rendered; batch mode does not
    render certificates from unverified data.
 
+## Managing pedigrees
+
+- **Reuse a bird already on file** — when starting a new pedigree, either
+  side can be "Upload new scan" (the normal flow) or "Use existing bird": a
+  searchable picker over every already-`verified` bird in the database (any
+  upload's subject, or an earlier merge's child), skipping extraction and
+  verification entirely for that side. This is what makes pairing the same
+  bird with a new mate next season free of API cost and re-uploading.
+- **Delete** a pedigree from the Pedigrees list to remove that generated
+  sheet. It does **not** delete the underlying bird or ancestor data — that
+  stays on file for cross-referencing and for reuse as a parent later. If
+  you genuinely want a bird gone from the database entirely, that's not
+  exposed in the UI (deliberately — it's the one destructive operation that
+  would break cross-referencing for anything else that shares an ancestor
+  with it).
+- **Folders** group pedigrees on the Pedigrees list for browsing — purely
+  organisational, e.g. by season or by buyer. Deleting a folder never
+  deletes what's in it; its pedigrees just fall back to Unfiled.
+
 ## Data model
 
 See `shared/types.ts`. The rules that matter:
@@ -133,7 +152,7 @@ server/               Local deploy target — Express + better-sqlite3
   lib/
     anthropic.ts        Thin adapter: builds the client from .env, calls shared/anthropic.ts
     merge.ts             Phase 3 tree assembly
-  routes/               /api/extract, /api/birds, /api/merge, /api/crossref, /api/pedigrees
+  routes/               /api/extract, /api/birds, /api/merge, /api/crossref, /api/pedigrees, /api/settings, /api/folders
   scripts/
     seed.ts              Seeds the 3 real pedigrees + fixtures described in the brief
     batch.ts             Folder-in, extraction-out batch mode
@@ -212,7 +231,17 @@ time instead of through the UI, `npx wrangler secret put ANTHROPIC_API_KEY`
 still works as a fallback the Settings page will use until you paste one
 in.)
 
-`npm run deploy` is the only command you need for future updates.
+`npm run deploy` is the only command you need for future updates — **except**
+when a change adds or alters a database table, which needs its migration
+applied once by hand (`git pull` and `npm run deploy` alone won't touch the
+live D1 schema). The commit that added folders and bird-reuse is one of
+those — if you deployed before it, run this once against your live database:
+
+```bash
+npm run db:migrate:0003:remote
+```
+
+Safe to run more than once; it's a no-op if already applied.
 
 ### Where the API key lives
 
