@@ -1,0 +1,46 @@
+# Cloudflare Worker config for the hosted deploy target. The local tool
+# (npm run dev — Express + better-sqlite3) is unaffected by any of this;
+# this is purely the "put it on Cloudflare like my other sites" path.
+#
+# One-time setup before the first `wrangler deploy` — see README's
+# "Hosting on Cloudflare" section for the full walkthrough:
+#   1. wrangler login
+#   2. wrangler d1 create oudeluck-pedigree-builder   -> paste the printed
+#      database_id below
+#   3. wrangler r2 bucket create oudeluck-pedigree-uploads
+#   4. wrangler d1 execute oudeluck-pedigree-builder --remote --file=./migrations/0001_init.sql
+#   5. wrangler secret put ANTHROPIC_API_KEY
+#   6. npm run build && wrangler deploy
+#   7. In the Cloudflare dashboard: Zero Trust -> Access -> Applications ->
+#      add this Worker's route, restrict to your own email. This is what
+#      actually keeps it private — nothing below does that on its own.
+
+name = "oudeluck-pedigree-builder"
+main = "worker/index.ts"
+compatibility_date = "2026-08-01"
+compatibility_flags = ["nodejs_compat"]
+
+[assets]
+directory = "./dist"
+# Only these paths invoke the Worker script; everything else (the built
+# React app's JS/CSS/index.html) is served directly as a static asset.
+run_worker_first = ["/api/*", "/uploads/*"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "oudeluck-pedigree-builder"
+database_id = "REPLACE_WITH_D1_DATABASE_ID" # from `wrangler d1 create` output
+
+[[r2_buckets]]
+binding = "UPLOADS"
+bucket_name = "oudeluck-pedigree-uploads"
+
+# Optional model overrides (non-secret) — uncomment to pin a specific model
+# instead of the code's default ("claude-opus-5").
+# [vars]
+# PEDIGREE_EXTRACTION_MODEL = "claude-opus-5"
+# PEDIGREE_PROSE_MODEL = "claude-opus-5"
+
+# ANTHROPIC_API_KEY is NOT set here — it's a secret, set once via:
+#   wrangler secret put ANTHROPIC_API_KEY
+# so it never sits in plaintext in this file or in git.

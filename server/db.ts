@@ -16,7 +16,7 @@ export const db = new Database(DB_PATH);
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 
-const schema = fs.readFileSync(path.resolve(__dirname, 'schema.sql'), 'utf-8');
+const schema = fs.readFileSync(path.resolve(__dirname, '..', 'schema.sql'), 'utf-8');
 db.exec(schema);
 
 // ---- row <-> Bird mapping -------------------------------------------------

@@ -1,13 +1,12 @@
-// Phase 3 — merge (build brief §5). Mechanical tree assembly is pure logic;
-// the only LLM call in this phase writes prose over the assembled,
-// already-verified tree.
+// Phase 3 — merge, ported for D1 (async). Same logic as server/lib/merge.ts.
 
-import { randomUUID } from 'node:crypto';
 import type { Bird, PedigreeSide } from '../../shared/types.js';
 import { normaliseRing } from '../../shared/ring.js';
 import { findLineBreeding } from '../../shared/crossref.js';
-import { generateProse, type ProseInputBird } from './anthropic.js';
+import type { ProseInputBird } from '../../shared/anthropic.js';
+import { generateProse } from './anthropic.js';
 import { getAllBirds, getBird, saveBird, saveChildPedigree } from '../db.js';
+import type { Env } from '../env.js';
 
 export function walkTree(rootId: string, index: Map<string, Bird>): Bird[] {
   const out: Bird[] = [];
@@ -28,7 +27,6 @@ export function walkTree(rootId: string, index: Map<string, Bird>): Bird[] {
 function roleLabel(path: PedigreeSide[]): string {
   if (path.length === 0) return 'subject';
   const named = path.map((s) => (s === 'sire' ? "sire's" : "dam's"));
-  // "sire" / "dam" for depth 1, then "sire's sire", "sire's sire's dam", ...
   if (path.length === 1) return path[0];
   return `${named.slice(0, -1).join(' ')} ${path[path.length - 1]}`;
 }
@@ -38,7 +36,6 @@ export interface MergeInput {
   damRootId: string;
   child: {
     ring: string;
-    ringNormalised?: string;
     name?: string;
     colour?: string;
     sex?: Bird['sex'];
@@ -56,17 +53,17 @@ export interface MergeResult {
   lineBreedingSummary: string[];
 }
 
-export async function mergePedigree(input: MergeInput): Promise<MergeResult> {
-  const allBirds = getAllBirds();
+export async function mergePedigree(env: Env, input: MergeInput): Promise<MergeResult> {
+  const allBirds = await getAllBirds(env.DB);
   const index = new Map(allBirds.map((b) => [b.id, b]));
 
-  const sireRoot = getBird(input.sireRootId);
-  const damRoot = getBird(input.damRootId);
+  const sireRoot = await getBird(env.DB, input.sireRootId);
+  const damRoot = await getBird(env.DB, input.damRootId);
   if (!sireRoot) throw new Error(`Sire root bird ${input.sireRootId} not found`);
   if (!damRoot) throw new Error(`Dam root bird ${input.damRootId} not found`);
 
   const child: Bird = {
-    id: randomUUID(),
+    id: crypto.randomUUID(),
     ring: input.child.ring,
     name: input.child.name,
     colour: input.child.colour,
@@ -78,28 +75,23 @@ export async function mergePedigree(input: MergeInput): Promise<MergeResult> {
     sireId: sireRoot.id,
     damId: damRoot.id,
     confidence: 1,
-    verified: true, // hand-entered by the operator at merge time, not extracted
+    verified: true,
   };
   child.ringNormalised = normaliseRing(child.ring);
 
-  saveBird(child);
+  await saveBird(env.DB, child);
   index.set(child.id, child);
 
   const sireTree = walkTree(sireRoot.id, index);
   const damTree = walkTree(damRoot.id, index);
   const fullTree = [child, ...sireTree, ...damTree];
 
-  // Line-breeding of note, scoped to the child we just created (Phase 5
-  // logic reused here purely as grounding for the prose call — the
-  // authoritative cross-collection report is still GET /api/crossref).
   const matches = findLineBreeding(fullTree).filter((m) => m.birdId === child.id);
   const lineBreedingSummary = matches.map((m) => {
     const side = m.occurrences.map((o) => o.side.join('>')).join(' and ');
     return `${m.ancestorRing}${m.ancestorName ? ` "${m.ancestorName}"` : ''} sits ${m.notation} (generations: ${m.occurrences.map((o) => o.generation).join(', ')}; paths: ${side})`;
   });
 
-  // Role labels for the prose call, computed via a fresh BFS so both sides
-  // are labelled relative to the child ("sire", "sire's sire", "dam's dam", ...).
   const roleOf = new Map<string, string>([[child.id, 'subject']]);
   function labelSide(rootId: string, firstSide: PedigreeSide) {
     function visit(id: string | undefined, path: PedigreeSide[]) {
@@ -126,10 +118,10 @@ export async function mergePedigree(input: MergeInput): Promise<MergeResult> {
     role: roleOf.get(b.id) ?? 'ancestor',
   }));
 
-  const prose = await generateProse(child.ring, proseInput, lineBreedingSummary);
+  const prose = await generateProse(env, child.ring, proseInput, lineBreedingSummary);
 
-  const childPedigreeId = randomUUID();
-  saveChildPedigree({
+  const childPedigreeId = crypto.randomUUID();
+  await saveChildPedigree(env.DB, {
     id: childPedigreeId,
     childBirdId: child.id,
     sireUploadId: input.sireUploadId,
@@ -140,9 +132,8 @@ export async function mergePedigree(input: MergeInput): Promise<MergeResult> {
   return { child, childPedigreeId, tree: fullTree, lineBreedingSummary };
 }
 
-/** Full tree for an already-merged child (used to re-render its sheet). */
-export function getFullTree(childId: string): Bird[] {
-  const allBirds = getAllBirds();
+export async function getFullTree(env: Env, childId: string): Promise<Bird[]> {
+  const allBirds = await getAllBirds(env.DB);
   const index = new Map(allBirds.map((b) => [b.id, b]));
   return walkTree(childId, index);
 }

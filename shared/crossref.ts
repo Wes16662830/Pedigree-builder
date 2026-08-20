@@ -4,8 +4,8 @@
 // different uploads produce two different rows for what is physically the
 // same bird — see server/scripts/seed.ts for a worked example).
 
-import type { Bird, CrossReferenceReport, LineBreedingMatch, PedigreeSide, SharedAncestorMatch, SiblingMatch } from '../../shared/types.js';
-import { coefficientOfInbreeding } from '../../shared/inbreeding.js';
+import type { Bird, CrossReferenceReport, LineBreedingMatch, PedigreeSide, SharedAncestorMatch, SiblingMatch } from './types.js';
+import { coefficientOfInbreeding } from './inbreeding.js';
 
 function byId(birds: Bird[]): Map<string, Bird> {
   return new Map(birds.map((b) => [b.id, b]));

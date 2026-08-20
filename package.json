@@ -8,11 +8,15 @@
     "dev": "concurrently -k -n web,api -c blue,green \"npm:dev:web\" \"npm:dev:api\"",
     "dev:web": "vite",
     "dev:api": "tsx watch server/index.ts",
-    "build": "tsc -b && vite build",
+    "build": "vite build",
     "preview": "vite preview",
-    "typecheck": "tsc -b --noEmit",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.server.json --noEmit && tsc -p tsconfig.worker.json --noEmit",
     "db:seed": "tsx server/scripts/seed.ts",
-    "batch": "tsx server/scripts/batch.ts"
+    "batch": "tsx server/scripts/batch.ts",
+    "worker:dev": "npm run build && wrangler dev",
+    "deploy": "npm run build && wrangler deploy",
+    "db:migrate:local": "wrangler d1 execute oudeluck-pedigree-builder --local --file=./migrations/0001_init.sql",
+    "db:migrate:remote": "wrangler d1 execute oudeluck-pedigree-builder --remote --file=./migrations/0001_init.sql"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.120.0",
@@ -20,12 +24,14 @@
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
+    "hono": "^4.13.3",
     "multer": "^2.0.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "zod": "^4.0.0"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260820.1",
     "@types/better-sqlite3": "^7.6.12",
     "@types/cors": "^2.8.17",
     "@types/express": "^4.17.21",
@@ -40,6 +46,7 @@
     "tailwindcss": "^3.4.17",
     "tsx": "^4.19.2",
     "typescript": "^5.7.3",
-    "vite": "^6.0.7"
+    "vite": "^6.0.7",
+    "wrangler": "^4.124.0"
   }
 }

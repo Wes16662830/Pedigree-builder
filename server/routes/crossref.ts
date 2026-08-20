@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { getAllBirds } from '../db.js';
-import { buildCrossReferenceReport, inbreedingForBird } from '../lib/crossref.js';
+import { buildCrossReferenceReport, inbreedingForBird } from '../../shared/crossref.js';
 
 export const crossrefRouter = Router();
 

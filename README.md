@@ -10,11 +10,15 @@ marker, and mix English/German/Dutch/Czech text. Extraction is done by a
 vision model (Claude), not OCR + regex — see the build brief this project
 was built from for the full reasoning.
 
-This is the **local tool** (build option A from the brief): runs on your own
-machine, API key in `.env`, no auth, no hosting, no per-user storage. A
-single SQLite file on disk.
+This started as the **local tool** (build option A from the brief): runs on
+your own machine, API key in `.env`, no auth, no hosting, no per-user
+storage, a single SQLite file on disk. It can now also run **hosted on
+Cloudflare** (Workers + D1 + R2) so it's reachable from a real URL like your
+other sites — see [Hosting on Cloudflare](#hosting-on-cloudflare) below. Both
+targets share the same core logic (`shared/`); only where data is stored and
+where the API key comes from differs.
 
-## Setup
+## Setup (local)
 
 ```bash
 npm install
@@ -95,7 +99,7 @@ See `shared/types.ts`. The rules that matter:
   never paraphrased in place.
 - `sex` is `"unknown"` unless the source states it for that specific bird.
 - Every bird from every upload is stored, not just the parents — that's what
-  makes cross-referencing (`shared/inbreeding.ts`, `server/lib/crossref.ts`)
+  makes cross-referencing (`shared/inbreeding.ts`, `shared/crossref.ts`)
   possible at all.
 
 ## Ring format — the one open decision (build brief §7)
@@ -113,29 +117,107 @@ brief leaves this unresolved.
 ## Project layout
 
 ```
-shared/            Pure logic shared by client + server: data model, ring
-                    normalisation, Wright's coefficient of inbreeding.
-server/
-  index.ts          Express app
-  db.ts             better-sqlite3 access layer
-  schema.sql        SQLite schema
-  env.ts            .env loading — API key never leaves the server
+shared/              Pure logic shared by EVERYTHING (client, local server,
+                      Cloudflare Worker): data model, ring normalisation,
+                      Wright's coefficient of inbreeding, extraction/prose
+                      prompts, cross-reference matching, and the Claude
+                      vision/prose calls themselves (anthropic.ts — takes an
+                      already-built client + model id, so it doesn't care
+                      which backend constructed them).
+server/               Local deploy target — Express + better-sqlite3
+  index.ts             Express app
+  db.ts                better-sqlite3 access layer (reads schema.sql)
+  env.ts                .env loading — API key never leaves the server
   lib/
-    anthropic.ts     Vision extraction + prose generation (Claude calls)
-    prompts.ts       The actual extraction/prose prompts
-    crossref.ts      Phase 5 matching (shared ancestors, line-breeding, siblings)
-    merge.ts         Phase 3 tree assembly
-  routes/            /api/extract, /api/birds, /api/merge, /api/crossref, /api/pedigrees
+    anthropic.ts        Thin adapter: builds the client from .env, calls shared/anthropic.ts
+    merge.ts             Phase 3 tree assembly
+  routes/               /api/extract, /api/birds, /api/merge, /api/crossref, /api/pedigrees
   scripts/
-    seed.ts          Seeds the 3 real pedigrees + fixtures described in the brief
-    batch.ts         Folder-in, extraction-out batch mode
+    seed.ts              Seeds the 3 real pedigrees + fixtures described in the brief
+    batch.ts             Folder-in, extraction-out batch mode
+worker/                Cloudflare deploy target — Hono + D1 + R2
+  index.ts               Worker entry (Hono app), also serves /uploads/* from R2
+  db.ts                  D1 access layer (async), same schema as server/db.ts
+  env.ts                 Typed bindings (DB, UPLOADS, ANTHROPIC_API_KEY)
+  lib/
+    anthropic.ts          Thin adapter: builds the client from the Worker secret
+    merge.ts               Phase 3 tree assembly (D1 version)
+  routes/                 Same route surface as server/routes, Hono-flavoured
 src/
   components/
-    PedigreeSheet.tsx  The render/edit component (Phase 4)
-  pages/               Upload, Verify, Merge, Sheet, Cross-reference, Home
-  lib/                 API client, layout geometry, export-to-HTML
-data/                 birds.db, uploads/, exports/ (gitignored)
+    PedigreeSheet.tsx    The render/edit component (Phase 4)
+  pages/                 Upload, Verify, Merge, Sheet, Cross-reference, Home
+  lib/                   API client, layout geometry, export-to-HTML
+schema.sql             Canonical SQLite/D1 schema (read by server/db.ts directly;
+                        copied into migrations/0001_init.sql for `wrangler d1 execute`)
+migrations/             D1 migrations
+wrangler.toml           Cloudflare Worker config (D1/R2 bindings, static assets)
+data/                   birds.db, uploads/, exports/ — local-target only (gitignored)
 ```
+
+## Hosting on Cloudflare
+
+The local tool and the hosted one are the same app — same data model, same
+extraction rules, same UI. What changes going to Cloudflare:
+
+| | Local (`npm run dev`) | Cloudflare (`wrangler deploy`) |
+|---|---|---|
+| Backend | Express, a long-running Node process | Workers (Hono), one request at a time, no persistent process |
+| Database | `better-sqlite3` → `data/birds.db` on disk | D1 (Cloudflare's managed SQLite) |
+| Uploaded scans | Saved to `data/uploads/` on disk | Saved to an R2 bucket |
+| API key | `.env` (`ANTHROPIC_API_KEY`) | a Worker secret (`wrangler secret put`) — still never reaches the browser |
+| Who can reach it | only you, it's on your machine | **anyone who has the URL, unless you gate it** — see below |
+
+**That last row is the one that matters.** There is no login built into the
+app itself — the brief's local-tool design never needed one. Putting this on
+a public Cloudflare URL without a gate in front of it means anyone who finds
+the link can trigger paid Claude API calls on your account. The fix isn't
+app code — it's **Cloudflare Access**, which sits in front of the Worker and
+requires a login (yours, by email) before any request reaches it at all:
+
+1. In the Cloudflare dashboard: **Zero Trust → Access → Applications → Add an application → Self-hosted**.
+2. Point it at this Worker's route/domain (e.g. `pedigree.yourdomain.com`, same as your pricing calculator's setup).
+3. Add a policy: **Allow**, action **Login**, include rule = your email address only (Cloudflare will email you a one-time code — no password to manage).
+4. Save. Now the app is reachable only after you log in with that email; nobody else gets past Access to even hit `/api/*`.
+
+This is a dashboard step, not something in this repo — there's nothing to
+commit for it.
+
+### First-time deploy
+
+```bash
+npx wrangler login                      # opens a browser to authorize wrangler
+
+npx wrangler d1 create oudeluck-pedigree-builder
+# -> copy the printed database_id into wrangler.toml's [[d1_databases]] block
+
+npx wrangler r2 bucket create oudeluck-pedigree-uploads
+
+npm run db:migrate:remote               # applies schema.sql to the D1 database
+
+npx wrangler secret put ANTHROPIC_API_KEY
+# -> paste your key when prompted
+
+npm run deploy                          # builds the frontend, then wrangler deploy
+```
+
+Then set up Cloudflare Access as above. After that, `npm run deploy` is the
+only command you need for future updates.
+
+### Local Worker preview
+
+`npm run worker:dev` runs the actual Worker code (Hono, D1, R2) against
+Miniflare's local emulation — a truer preview than the plain `npm run dev`
+Express server, useful for testing the Cloudflare-specific code paths before
+deploying. Apply the schema to the local D1 emulation first with
+`npm run db:migrate:local`. This is entirely separate from your production
+data — nothing here touches the real D1 database or `data/birds.db`.
+
+### Model note
+
+Both deploy targets default to `claude-opus-5`. Override it per-target if
+needed: locally via `PEDIGREE_EXTRACTION_MODEL`/`PEDIGREE_PROSE_MODEL` in
+`.env`; on Cloudflare via the commented-out `[vars]` block in `wrangler.toml`.
 
 ## What's deliberately not here
 

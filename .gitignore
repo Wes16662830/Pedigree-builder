@@ -13,3 +13,7 @@ data/exports/*
 !data/exports/.gitkeep
 .DS_Store
 *.log
+
+# Cloudflare / wrangler local state and secrets
+.wrangler
+.dev.vars
