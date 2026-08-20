@@ -131,9 +131,24 @@ export function saveBird(bird: Bird): void {
   });
 }
 
+const linkParentsStmt = db.prepare(`UPDATE birds SET sire_id = ?, dam_id = ? WHERE id = ?`);
+
+// Extraction doesn't guarantee a bird's ancestors appear earlier in the
+// array than the bird itself (the model has no reason to order its output
+// that way) — but sire_id/dam_id are foreign keys into this same table, so
+// inserting bird A before bird B (A's own sire, referenced by A.sireId)
+// would fail the FK check the instant A is inserted. Two passes sidesteps
+// the ordering requirement entirely: insert every bird with no parent
+// links first (guaranteed FK-safe — nothing references anything yet), then
+// wire up sire_id/dam_id once every bird in the batch is guaranteed to
+// exist. Both passes run in one transaction, so this is invisible outside
+// this function.
 export function saveBirds(birds: Bird[]): void {
   const tx = db.transaction((list: Bird[]) => {
-    for (const b of list) saveBird(b);
+    for (const b of list) saveBird({ ...b, sireId: undefined, damId: undefined });
+    for (const b of list) {
+      if (b.sireId || b.damId) linkParentsStmt.run(b.sireId ?? null, b.damId ?? null, b.id);
+    }
   });
   tx(birds);
 }

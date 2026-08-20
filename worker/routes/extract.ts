@@ -34,6 +34,9 @@ extractRouter.post('/', async (c) => {
     const base64 = Buffer.from(bytes).toString('base64');
     const extracted = await extractPedigree(c.env, { filename: file.name, mimeType: file.type, base64 });
 
+    // Birds first: uploads.root_bird_id is a foreign key into birds(id), so
+    // the bird row has to exist before the upload row can reference it.
+    await saveBirds(c.env.DB, extracted.birds);
     await saveUpload(c.env.DB, {
       id: uploadId,
       originalFilename: file.name,
@@ -43,7 +46,6 @@ extractRouter.post('/', async (c) => {
       rawExtraction: extracted,
       verified: false,
     });
-    await saveBirds(c.env.DB, extracted.birds);
 
     return c.json({ uploadId, extracted, fileUrl: `/uploads/${objectKey}` });
   } catch (err) {

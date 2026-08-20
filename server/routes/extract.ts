@@ -50,6 +50,13 @@ extractRouter.post('/', upload.single('file'), async (req, res) => {
     });
 
     const uploadId = randomUUID();
+
+    // Birds first: uploads.root_bird_id is a foreign key into birds(id), so
+    // the bird row has to exist before the upload row can reference it.
+    // Also persists immediately so the verification UI has something to
+    // load and edit in place; Phase 2 will overwrite fields as the operator
+    // corrects them, then flip `verified`.
+    saveBirds(extracted.birds);
     saveUpload({
       id: uploadId,
       originalFilename: req.file.originalname,
@@ -59,11 +66,6 @@ extractRouter.post('/', upload.single('file'), async (req, res) => {
       rawExtraction: extracted,
       verified: false,
     });
-
-    // Persist immediately so the verification UI has something to load and
-    // edit in place; Phase 2 will overwrite fields as the operator corrects
-    // them, then flip `verified`.
-    saveBirds(extracted.birds);
 
     res.json({ uploadId, extracted, fileUrl: `/uploads/${path.basename(req.file.path)}` });
   } catch (err) {

@@ -97,10 +97,24 @@ export async function saveBird(db: D1Database, bird: Bird): Promise<void> {
     .run();
 }
 
+// Extraction doesn't guarantee a bird's ancestors appear earlier in the
+// array than the bird itself (the model has no reason to order its output
+// that way) — but sire_id/dam_id are foreign keys into this same table, so
+// inserting bird A before bird B (A's own sire, referenced by A.sireId)
+// would fail the FK check the instant A is inserted. Two passes sidesteps
+// the ordering requirement entirely: insert every bird with no parent
+// links first (guaranteed FK-safe — nothing references anything yet), then
+// wire up sire_id/dam_id once every bird in the batch is guaranteed to
+// exist.
 export async function saveBirds(db: D1Database, birds: Bird[]): Promise<void> {
   // D1 doesn't support better-sqlite3-style sync transactions; sequential
   // awaits are fine here — batches are small (one pedigree tree at a time).
-  for (const b of birds) await saveBird(db, b);
+  for (const b of birds) await saveBird(db, { ...b, sireId: undefined, damId: undefined });
+  for (const b of birds) {
+    if (b.sireId || b.damId) {
+      await db.prepare('UPDATE birds SET sire_id = ?, dam_id = ? WHERE id = ?').bind(b.sireId ?? null, b.damId ?? null, b.id).run();
+    }
+  }
 }
 
 export async function getBird(db: D1Database, id: string): Promise<Bird | undefined> {
