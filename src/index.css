@@ -19,6 +19,28 @@
   body {
     margin: 0;
   }
+
+  /* The sheet itself is already sized to exactly one A4 landscape page
+     (CANVAS_W/H in src/lib/layout.ts), but the app chrome around it on the
+     Sheet page — main's padding, the bordered/scrollable preview panel —
+     is not, and printing it verbatim pushes the sheet past one page's
+     margins onto a second. Hide everything except the sheet and pin it to
+     the page origin so none of that ancestor spacing carries into print,
+     regardless of how the preview around it is laid out on screen. */
+  body * {
+    visibility: hidden;
+  }
+  .pedigree-sheet,
+  .pedigree-sheet * {
+    visibility: visible;
+  }
+  .pedigree-sheet {
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    margin: 0 !important;
+    box-shadow: none !important;
+  }
 }
 
 .pedigree-sheet {

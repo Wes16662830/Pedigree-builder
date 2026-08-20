@@ -235,6 +235,7 @@ function Box({
       {editMode === 'layout' && (
         <div
           contentEditable={false}
+          className="no-print"
           style={{ position: 'absolute', top: 2, right: 2, display: 'flex', gap: 2, background: 'rgba(255,255,255,0.9)' }}
         >
           <button
@@ -265,6 +266,7 @@ function Box({
         <div
           onMouseDown={startResize}
           title="Drag to resize"
+          className="no-print"
           style={{
             position: 'absolute',
             right: 0,
