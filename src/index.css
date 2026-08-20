@@ -1,0 +1,35 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --oudeluck-gold: #d19a45;
+  --oudeluck-black: #111111;
+}
+
+@page {
+  size: A4 landscape;
+  margin: 0;
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  body {
+    margin: 0;
+  }
+}
+
+.pedigree-sheet {
+  print-color-adjust: exact;
+  -webkit-print-color-adjust: exact;
+}
+
+/* Unconfirmed / placeholder data — build brief §7: missing results and
+   unknown sex must render as a visible red placeholder, never be silently
+   omitted or guessed. */
+.fill {
+  color: #dc2626;
+  font-style: italic;
+}

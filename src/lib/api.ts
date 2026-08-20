@@ -1,0 +1,129 @@
+// Thin fetch wrapper over the Express proxy. The frontend never talks to
+// Anthropic directly and never sees an API key (build brief §3/§8).
+
+import type { Bird, CrossReferenceReport, ExtractedPedigree, InbreedingResult, PedigreeProse } from '../../shared/types';
+
+async function api<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(`/api${path}`, {
+    ...init,
+    headers: {
+      ...(init?.body && !(init.body instanceof FormData) ? { 'Content-Type': 'application/json' } : {}),
+      ...init?.headers,
+    },
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error ?? `Request failed: ${res.status} ${res.statusText}`);
+  }
+  if (res.status === 204) return undefined as T;
+  return res.json() as Promise<T>;
+}
+
+export interface ExtractResponse {
+  uploadId: string;
+  extracted: ExtractedPedigree;
+  fileUrl: string;
+}
+
+export function extractPedigreeFile(file: File): Promise<ExtractResponse> {
+  const form = new FormData();
+  form.append('file', file);
+  return api('/extract', { method: 'POST', body: form });
+}
+
+export function getUpload(uploadId: string) {
+  return api<{
+    id: string;
+    original_filename: string;
+    root_bird_id: string | null;
+    verified: number;
+    rawExtraction: ExtractedPedigree | null;
+    fileUrl: string;
+  }>(`/extract/${uploadId}`);
+}
+
+export function getAllBirds(): Promise<Bird[]> {
+  return api('/birds');
+}
+
+export function getBird(id: string): Promise<Bird> {
+  return api(`/birds/${id}`);
+}
+
+export function getBirdsBySource(sourceFile: string): Promise<Bird[]> {
+  return api(`/birds/by-source/${encodeURIComponent(sourceFile)}`);
+}
+
+export function updateBird(id: string, patch: Partial<Bird>): Promise<Bird> {
+  return api(`/birds/${id}`, { method: 'PUT', body: JSON.stringify(patch) });
+}
+
+export function setBirdVerified(id: string, verified: boolean): Promise<Bird> {
+  return api(`/birds/${id}/verify`, { method: 'POST', body: JSON.stringify({ verified }) });
+}
+
+export function completeUploadVerification(uploadId: string, sourceFile: string): Promise<{ ok: true }> {
+  return api(`/birds/upload/${uploadId}/complete-verification`, {
+    method: 'POST',
+    body: JSON.stringify({ sourceFile }),
+  });
+}
+
+export interface MergeInput {
+  sireUploadId: string;
+  damUploadId: string;
+  child: { ring: string; name?: string; sex?: Bird['sex']; colour?: string; breeder?: string; loftAddress?: string };
+}
+
+export interface MergeResult {
+  child: Bird;
+  childPedigreeId: string;
+  tree: Bird[];
+  lineBreedingSummary: string[];
+}
+
+export function mergePedigrees(input: MergeInput): Promise<MergeResult> {
+  return api('/merge', { method: 'POST', body: JSON.stringify(input) });
+}
+
+export function listChildPedigrees() {
+  return api<{ id: string; child_bird_id: string; created_at: string }[]>('/merge');
+}
+
+export interface ChildPedigreeDetail {
+  id: string;
+  child_bird_id: string;
+  sire_upload_id: string;
+  dam_upload_id: string;
+  ring_field_order: string;
+  print_variant: string;
+  created_at: string;
+  updated_at: string;
+  prose: PedigreeProse;
+  layout: unknown;
+  child: Bird;
+  tree: Bird[];
+}
+
+export function getChildPedigree(id: string): Promise<ChildPedigreeDetail> {
+  return api(`/merge/${id}`);
+}
+
+export function getCrossReference(): Promise<CrossReferenceReport> {
+  return api('/crossref');
+}
+
+export function getInbreeding(birdId: string): Promise<InbreedingResult> {
+  return api(`/crossref/inbreeding/${birdId}`);
+}
+
+export function patchPedigree(id: string, patch: { layout?: unknown; ringFieldOrder?: string; printVariant?: string; prose?: unknown }) {
+  return api(`/pedigrees/${id}`, { method: 'PATCH', body: JSON.stringify(patch) });
+}
+
+export function exportPedigreeHtml(id: string, html: string) {
+  return api<{ ok: true; path: string; filename: string }>(`/pedigrees/${id}/export`, {
+    method: 'POST',
+    body: JSON.stringify({ html }),
+  });
+}
