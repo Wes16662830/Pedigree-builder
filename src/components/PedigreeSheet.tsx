@@ -5,17 +5,7 @@ import type { RingFieldOrder } from '../../shared/ring';
 import { formatRing, parseRingTokens } from '../../shared/ring';
 import type { LoftSettings } from '../lib/api';
 import { templateById } from '../lib/templates';
-import {
-  CANVAS_H,
-  CANVAS_W,
-  CONTENT_H,
-  CONTENT_Y,
-  HEADER_H,
-  MARGIN_X,
-  buildBoxes,
-  overrideFor,
-  type LayoutState,
-} from '../lib/layout';
+import { buildBoxes, geometryFor, overrideFor, type LayoutState } from '../lib/layout';
 
 export type EditMode = 'view' | 'text' | 'layout';
 export type PrintVariant = 'black-header' | 'white-panel';
@@ -80,11 +70,23 @@ function AncestorBoxBody({ bird, ringFieldOrder }: { bird: Bird; ringFieldOrder:
   );
 }
 
-function ChildBoxBody({ child, prose, ringFieldOrder, accent }: { child: Bird; prose: PedigreeProse; ringFieldOrder: RingFieldOrder; accent: string }) {
+function ChildBoxBody({
+  child,
+  prose,
+  ringFieldOrder,
+  accent,
+  photoMaxHeight = 110,
+}: {
+  child: Bird;
+  prose: PedigreeProse;
+  ringFieldOrder: RingFieldOrder;
+  accent: string;
+  photoMaxHeight?: number;
+}) {
   return (
     <div>
       {child.photoUrl && (
-        <img src={child.photoUrl} alt={child.ring} style={{ width: '100%', maxHeight: 110, objectFit: 'cover', borderRadius: 4, marginBottom: 6 }} />
+        <img src={child.photoUrl} alt={child.ring} style={{ width: '100%', maxHeight: photoMaxHeight, objectFit: 'cover', borderRadius: 4, marginBottom: 6 }} />
       )}
       <div style={{ fontSize: 18, fontWeight: 800 }}>{displayRing(child.ring, ringFieldOrder)}</div>
       {child.name && <div style={{ fontStyle: 'italic', fontSize: 14 }}>"{child.name}"</div>}
@@ -306,14 +308,31 @@ export default function PedigreeSheet({
   sheetRef,
 }: Props) {
   const indexById = new Map(tree.map((b) => [b.id, b]));
-  const boxes = buildBoxes(child, indexById);
+  const tmpl = templateById(templateId);
+  const geo = geometryFor(tmpl.orientation);
+  const boxes = buildBoxes(child, indexById, tmpl.layoutKind, geo);
 
   const headerBg = printVariant === 'black-header' ? INK : '#fff';
   const headerFg = printVariant === 'black-header' ? '#fff' : INK;
-  const { accent } = templateById(templateId);
+  const { accent } = tmpl;
   const loftName = loft?.name?.trim() || DEFAULT_LOFT_NAME;
   const loftSubtitle = loft?.subtitle?.trim() || DEFAULT_LOFT_SUBTITLE;
   const loftAddress = loft?.address?.trim() || DEFAULT_LOFT_ADDRESS;
+  const fontFamily = tmpl.decorative ? 'Georgia, "Times New Roman", serif' : 'Arial, Helvetica, sans-serif';
+
+  // Divider between sire's and dam's side, positioned from where the
+  // actual boxes landed rather than a fixed offset — works the same for
+  // the 'tree' layout's top/bottom bands and the 'list' layout's single
+  // indented column, without either needing to know about the other.
+  const ancestorBoxes = boxes.filter((b) => b.generation > 0);
+  const sireBoxes = ancestorBoxes.filter((b) => b.band === 'sire');
+  const damBoxes = ancestorBoxes.filter((b) => b.band === 'dam');
+  const dividerX1 = ancestorBoxes.length ? Math.min(...ancestorBoxes.map((b) => b.x)) : geo.marginX;
+  const dividerX2 = ancestorBoxes.length ? Math.max(...ancestorBoxes.map((b) => b.x + b.w)) : geo.canvasW - geo.marginX;
+  const sireStartY = sireBoxes.length ? Math.min(...sireBoxes.map((b) => b.y)) : geo.contentY;
+  const damStartY = damBoxes.length ? Math.min(...damBoxes.map((b) => b.y)) : geo.contentY + geo.contentH / 2;
+
+  const borderInset = tmpl.decorative ? 12 : 0;
 
   return (
     <div
@@ -323,23 +342,44 @@ export default function PedigreeSheet({
       suppressContentEditableWarning
       style={{
         position: 'relative',
-        width: CANVAS_W,
-        height: CANVAS_H,
+        width: geo.canvasW,
+        height: geo.canvasH,
         background: '#fff',
-        fontFamily: 'Arial, Helvetica, sans-serif',
+        fontFamily,
         color: INK,
         margin: '0 auto',
         boxShadow: '0 0 0 1px #ddd',
       }}
     >
+      {tmpl.decorative && (
+        <>
+          <div
+            style={{
+              position: 'absolute',
+              inset: borderInset,
+              border: `2px solid ${accent}`,
+              pointerEvents: 'none',
+            }}
+          />
+          <div
+            style={{
+              position: 'absolute',
+              inset: borderInset + 5,
+              border: `1px solid ${accent}`,
+              pointerEvents: 'none',
+            }}
+          />
+        </>
+      )}
+
       {/* Header band */}
       <div
         style={{
           position: 'absolute',
           left: 0,
           top: 0,
-          width: CANVAS_W,
-          height: HEADER_H,
+          width: geo.canvasW,
+          height: geo.headerH,
           background: headerBg,
           color: headerFg,
           display: 'flex',
@@ -395,19 +435,28 @@ export default function PedigreeSheet({
         </div>
       </div>
 
-      {/* Band divider hint (sire above / dam below) */}
-      <div
-        style={{
-          position: 'absolute',
-          left: MARGIN_X + 172,
-          top: CONTENT_Y + CONTENT_H / 2 - 1,
-          width: CANVAS_W - MARGIN_X * 2 - 172,
-          height: 2,
-          background: '#eee',
-        }}
-      />
-      <div style={{ position: 'absolute', left: MARGIN_X + 172, top: CONTENT_Y - 14, fontSize: 10, fontWeight: 700, color: accent }}>SIRE'S SIDE</div>
-      <div style={{ position: 'absolute', left: MARGIN_X + 172, top: CONTENT_Y + CONTENT_H / 2 + 2, fontSize: 10, fontWeight: 700, color: accent }}>DAM'S SIDE</div>
+      {/* Sire's-side / dam's-side divider, positioned from wherever the
+          ancestor boxes actually landed (see dividerX1/2, sireStartY,
+          damStartY above) so it works for both the 'tree' layout's
+          top/bottom bands and the 'list' layout's single stacked column. */}
+      {damBoxes.length > 0 && (
+        <div
+          style={{
+            position: 'absolute',
+            left: dividerX1,
+            top: damStartY - 3,
+            width: dividerX2 - dividerX1,
+            height: 2,
+            background: '#eee',
+          }}
+        />
+      )}
+      {sireBoxes.length > 0 && (
+        <div style={{ position: 'absolute', left: dividerX1, top: sireStartY - 14, fontSize: 10, fontWeight: 700, color: accent }}>SIRE'S SIDE</div>
+      )}
+      {damBoxes.length > 0 && (
+        <div style={{ position: 'absolute', left: dividerX1, top: damStartY + 2, fontSize: 10, fontWeight: 700, color: accent }}>DAM'S SIDE</div>
+      )}
 
       {boxes.map((box) => (
         <Box
@@ -425,7 +474,7 @@ export default function PedigreeSheet({
           accent={accent}
         >
           {box.generation === 0 ? (
-            <ChildBoxBody child={child} prose={prose} ringFieldOrder={ringFieldOrder} accent={accent} />
+            <ChildBoxBody child={child} prose={prose} ringFieldOrder={ringFieldOrder} accent={accent} photoMaxHeight={tmpl.photoMaxHeight} />
           ) : (
             <AncestorBoxBody bird={box.bird} ringFieldOrder={ringFieldOrder} />
           )}

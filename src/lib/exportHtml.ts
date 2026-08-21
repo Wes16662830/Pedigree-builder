@@ -4,14 +4,16 @@
 // live DOM is already self-contained — this just wraps that markup in a
 // minimal standalone document.
 
-export function buildExportHtml(sheetOuterHTML: string, title: string): string {
+import type { Orientation } from './layout';
+
+export function buildExportHtml(sheetOuterHTML: string, title: string, orientation: Orientation = 'landscape'): string {
   return `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8" />
 <title>${escapeHtml(title)}</title>
 <style>
-  @page { size: A4 landscape; margin: 0; }
+  @page { size: A4 ${orientation}; margin: 0; }
   html, body { margin: 0; padding: 0; background: #fff; }
   * { box-sizing: border-box; }
   .fill { color: #dc2626; font-style: italic; }

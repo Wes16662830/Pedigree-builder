@@ -7,6 +7,12 @@
   --oudeluck-black: #111111;
 }
 
+/* Default/fallback page size for a plain browser Ctrl+P before the Sheet
+   page has had a chance to set the real one (see src/lib/printPageSize.ts,
+   which injects a `#dynamic-page-size` <style> matching the selected
+   template's orientation — landscape 'tree' templates or portrait 'list'/
+   'certificate' ones — and overrides this simply by coming later in the
+   cascade). */
 @page {
   size: A4 landscape;
   margin: 0;

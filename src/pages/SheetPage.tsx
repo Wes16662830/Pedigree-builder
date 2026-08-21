@@ -6,7 +6,8 @@ import type { Bird, PedigreeProse } from '../../shared/types';
 import type { RingFieldOrder } from '../../shared/ring';
 import type { LayoutState } from '../lib/layout';
 import { buildExportHtml, downloadHtml } from '../lib/exportHtml';
-import { TEMPLATES, DEFAULT_TEMPLATE_ID } from '../lib/templates';
+import { TEMPLATES, DEFAULT_TEMPLATE_ID, templateById } from '../lib/templates';
+import { setPrintPageSize } from '../lib/printPageSize';
 
 interface Props {
   childPedigreeId: string;
@@ -44,6 +45,14 @@ export default function SheetPage({ childPedigreeId, onBack }: Props) {
       .then((s) => setLoft(s.loft))
       .catch(() => {});
   }, [childPedigreeId]);
+
+  // Keep the browser's @page size in sync with whichever template is
+  // selected — landscape 'tree' templates vs portrait 'list'/'certificate'
+  // ones — so both the in-app Print button and a plain browser Ctrl+P
+  // come out the right way up (see src/lib/printPageSize.ts).
+  useEffect(() => {
+    setPrintPageSize(templateById(templateId).orientation);
+  }, [templateId]);
 
   function onLayoutChange(id: string, patch: Partial<LayoutState[string]>) {
     setLayout((prev) => ({ ...prev, [id]: { ...prev[id], ...patch } }));
@@ -94,7 +103,7 @@ export default function SheetPage({ childPedigreeId, onBack }: Props) {
   async function doExport() {
     if (!sheetRef.current || !child) return;
     await saveLayout();
-    const html = buildExportHtml(sheetRef.current.outerHTML, `OudeLuck Pedigree — ${child.ring}`);
+    const html = buildExportHtml(sheetRef.current.outerHTML, `OudeLuck Pedigree — ${child.ring}`, templateById(templateId).orientation);
     const filename = `${child.ring.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}.html`;
     downloadHtml(filename, html);
     try {
@@ -127,12 +136,12 @@ export default function SheetPage({ childPedigreeId, onBack }: Props) {
           ))}
         </div>
 
-        <label className="ml-2 flex items-center gap-1 text-sm">
+        <label className="ml-2 flex items-center gap-1 text-sm" title={templateById(templateId).description}>
           Template:
           <select className="rounded border px-2 py-1" value={templateId} onChange={(e) => onTemplateChange(e.target.value)}>
             {TEMPLATES.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.label}
+              <option key={t.id} value={t.id} title={t.description}>
+                {t.label} · {t.orientation === 'portrait' ? 'portrait' : 'landscape'}
               </option>
             ))}
           </select>
@@ -176,6 +185,8 @@ export default function SheetPage({ childPedigreeId, onBack }: Props) {
           </button>
         </div>
       </div>
+
+      <p className="no-print mb-4 -mt-2 text-xs text-neutral-500">{templateById(templateId).description}</p>
 
       {showChildEditor && (
         <div className="no-print mb-4 max-w-xl">

@@ -1,20 +1,54 @@
-// Geometry for the pedigree sheet (build brief §4 Phase 4): A4 landscape,
-// child on the left, sire's ancestry filling the top band, dam's filling
-// the bottom band, subdividing binarily generation by generation — a
-// "4-column grid" of ancestor generations next to the child's own column.
+// Geometry for the pedigree sheet (build brief §4 Phase 4, extended with a
+// second layout family per the "other templates for pedigree layout"
+// follow-up). Two layout kinds share one A4 page, sized per orientation:
+//
+// - 'tree'  (landscape): child on the left, sire's ancestry filling the top
+//   band, dam's filling the bottom band, subdividing binarily generation by
+//   generation into a column per generation — the original layout.
+// - 'list'  (portrait): child as a strip across the top, then every present
+//   ancestor as a single indented column below (sire's side complete, then
+//   dam's), one row per ancestor rather than one fixed slot per possible
+//   ancestor — a compact "5-generation pedigree list" format.
+//
+// Both algorithms return the same PedigreeBox[] shape, so everything
+// downstream (Box, drag/resize overrides, per-box font scale) is unaware
+// of which one produced a given box.
 
 import type { Bird, PedigreeSide } from '../../shared/types';
 
-export const CANVAS_W = 1122; // A4 landscape @ 96dpi
-export const CANVAS_H = 793;
-export const HEADER_H = 92;
-export const MARGIN_X = 16;
-export const CHILD_W = 172;
-export const GEN_COLS = 4;
+export type LayoutKind = 'tree' | 'list';
+export type Orientation = 'landscape' | 'portrait';
 
-export const CONTENT_Y = HEADER_H + 10;
-export const CONTENT_H = CANVAS_H - HEADER_H - 26;
-export const COL_W = (CANVAS_W - 2 * MARGIN_X - CHILD_W) / GEN_COLS;
+const HEADER_H = 92;
+const MARGIN_X = 16;
+const BOTTOM_GAP = 26;
+
+export interface SheetGeometry {
+  canvasW: number;
+  canvasH: number;
+  headerH: number;
+  marginX: number;
+  contentY: number; // top of the content area, below the header band
+  contentH: number;
+  contentW: number;
+  orientation: Orientation;
+}
+
+export function geometryFor(orientation: Orientation): SheetGeometry {
+  const canvasW = orientation === 'landscape' ? 1122 : 793; // A4 @ 96dpi, either way up
+  const canvasH = orientation === 'landscape' ? 793 : 1122;
+  const contentY = HEADER_H + 10;
+  return {
+    canvasW,
+    canvasH,
+    headerH: HEADER_H,
+    marginX: MARGIN_X,
+    contentY,
+    contentH: canvasH - contentY - BOTTOM_GAP,
+    contentW: canvasW - 2 * MARGIN_X,
+    orientation,
+  };
+}
 
 export interface PedigreeBox {
   id: string;
@@ -27,18 +61,23 @@ export interface PedigreeBox {
   band?: 'sire' | 'dam';
 }
 
-export function buildBoxes(child: Bird, indexById: Map<string, Bird>): PedigreeBox[] {
-  const boxes: PedigreeBox[] = [
-    { id: child.id, bird: child, x: MARGIN_X, y: CONTENT_Y, w: CHILD_W, h: CONTENT_H, generation: 0 },
-  ];
+const MAX_GENERATIONS = 4; // how deep either layout will place ancestors
+
+// ---- 'tree' layout: child column + a column per generation, sire/dam split
+// top/bottom, subdividing binarily within each band. -------------------------
+function buildTreeBoxes(child: Bird, indexById: Map<string, Bird>, geo: SheetGeometry): PedigreeBox[] {
+  const childW = 172;
+  const colW = (geo.contentW - childW) / MAX_GENERATIONS;
+
+  const boxes: PedigreeBox[] = [{ id: child.id, bird: child, x: geo.marginX, y: geo.contentY, w: childW, h: geo.contentH, generation: 0 }];
 
   function place(id: string | undefined, band: 'sire' | 'dam', path: PedigreeSide[], generation: number) {
-    if (!id || generation > GEN_COLS) return;
+    if (!id || generation > MAX_GENERATIONS) return;
     const bird = indexById.get(id);
     if (!bird) return;
 
-    const bandY = band === 'sire' ? CONTENT_Y : CONTENT_Y + CONTENT_H / 2;
-    const bandH = CONTENT_H / 2;
+    const bandY = band === 'sire' ? geo.contentY : geo.contentY + geo.contentH / 2;
+    const bandH = geo.contentH / 2;
     const rows = Math.pow(2, generation - 1);
     const rowH = bandH / rows;
 
@@ -46,10 +85,10 @@ export function buildBoxes(child: Bird, indexById: Map<string, Bird>): PedigreeB
     let rowIndex = 0;
     for (const step of subPath) rowIndex = rowIndex * 2 + (step === 'dam' ? 1 : 0);
 
-    const x = MARGIN_X + CHILD_W + (generation - 1) * COL_W;
+    const x = geo.marginX + childW + (generation - 1) * colW;
     const y = bandY + rowIndex * rowH;
 
-    boxes.push({ id: bird.id, bird, x, y, w: COL_W, h: rowH, generation, band });
+    boxes.push({ id: bird.id, bird, x, y, w: colW, h: rowH, generation, band });
 
     place(bird.sireId, band, [...path, 'sire'], generation + 1);
     place(bird.damId, band, [...path, 'dam'], generation + 1);
@@ -59,6 +98,59 @@ export function buildBoxes(child: Bird, indexById: Map<string, Bird>): PedigreeB
   place(child.damId, 'dam', ['dam'], 1);
 
   return boxes;
+}
+
+// ---- 'list' layout: child strip on top, then every ancestor that's
+// actually present as one row below — sire's side depth-first, then dam's
+// — indented per generation instead of boxed into a fixed grid slot, so a
+// sparse tree stays compact instead of leaving blank space. -----------------
+function buildListBoxes(child: Bird, indexById: Map<string, Bird>, geo: SheetGeometry): PedigreeBox[] {
+  const childSpan = 320; // height of the child's own strip across the top
+  const gap = 10;
+  const listY = geo.contentY + childSpan + gap;
+  const listH = geo.contentH - childSpan - gap;
+  const indentStep = 28; // px of left-indent per generation deep
+
+  const boxes: PedigreeBox[] = [{ id: child.id, bird: child, x: geo.marginX, y: geo.contentY, w: geo.contentW, h: childSpan, generation: 0 }];
+
+  interface Entry {
+    bird: Bird;
+    band: 'sire' | 'dam';
+    generation: number;
+  }
+  const entries: Entry[] = [];
+
+  function walk(id: string | undefined, band: 'sire' | 'dam', generation: number) {
+    if (!id || generation > MAX_GENERATIONS) return;
+    const bird = indexById.get(id);
+    if (!bird) return;
+    entries.push({ bird, band, generation });
+    walk(bird.sireId, band, generation + 1);
+    walk(bird.damId, band, generation + 1);
+  }
+  walk(child.sireId, 'sire', 1);
+  walk(child.damId, 'dam', 1);
+
+  const rowH = listH / Math.max(entries.length, 1);
+  entries.forEach((entry, i) => {
+    const indent = (entry.generation - 1) * indentStep;
+    boxes.push({
+      id: entry.bird.id,
+      bird: entry.bird,
+      x: geo.marginX + indent,
+      y: listY + i * rowH,
+      w: geo.contentW - indent,
+      h: rowH,
+      generation: entry.generation,
+      band: entry.band,
+    });
+  });
+
+  return boxes;
+}
+
+export function buildBoxes(child: Bird, indexById: Map<string, Bird>, layoutKind: LayoutKind, geo: SheetGeometry): PedigreeBox[] {
+  return layoutKind === 'list' ? buildListBoxes(child, indexById, geo) : buildTreeBoxes(child, indexById, geo);
 }
 
 // ---- edit-mode state --------------------------------------------------
