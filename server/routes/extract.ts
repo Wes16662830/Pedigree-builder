@@ -3,7 +3,7 @@ import multer from 'multer';
 import path from 'node:path';
 import fs from 'node:fs';
 import { randomUUID } from 'node:crypto';
-import { extractPedigree } from '../lib/anthropic.js';
+import { extractPedigree, extractRaceResults } from '../lib/anthropic.js';
 import { saveUpload, saveBirds, getUpload } from '../db.js';
 
 const uploadsDir = path.resolve(process.cwd(), 'data', 'uploads');
@@ -25,6 +25,21 @@ const upload = multer({
   fileFilter: (_req, file, cb) => {
     if (!ACCEPTED_MIME.has(file.mimetype)) {
       cb(new Error(`Unsupported file type: ${file.mimetype}. Upload a PNG, JPEG, WEBP, GIF, or PDF.`));
+      return;
+    }
+    cb(null, true);
+  },
+});
+
+// Results screenshots aren't persisted anywhere (unlike pedigree uploads,
+// which get their own `uploads` row) — this is a one-shot vision call, so
+// there's no reason to accumulate orphan files on disk for it.
+const resultsUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 32 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (!ACCEPTED_MIME.has(file.mimetype)) {
+      cb(new Error(`Unsupported file type: ${file.mimetype}. Upload a PNG, JPEG, WEBP, or GIF screenshot.`));
       return;
     }
     cb(null, true);
@@ -71,6 +86,29 @@ extractRouter.post('/', upload.single('file'), async (req, res) => {
   } catch (err) {
     console.error('[extract] failed:', err);
     res.status(500).json({ error: err instanceof Error ? err.message : 'Extraction failed' });
+  }
+});
+
+// POST /api/extract/results — one race-history screenshot -> one vision
+// call, returning parsed Result[] for the caller to merge into a bird's
+// results and let the operator review before it's really saved (build
+// brief follow-up: "paste a results extract, add it to the child").
+extractRouter.post('/results', resultsUpload.single('file'), async (req, res) => {
+  if (!req.file) {
+    res.status(400).json({ error: 'No file uploaded. Field name must be "file".' });
+    return;
+  }
+  try {
+    const base64 = req.file.buffer.toString('base64');
+    const extracted = await extractRaceResults({
+      filename: req.file.originalname || 'pasted-screenshot.png',
+      mimeType: req.file.mimetype,
+      base64,
+    });
+    res.json(extracted);
+  } catch (err) {
+    console.error('[extract/results] failed:', err);
+    res.status(500).json({ error: err instanceof Error ? err.message : 'Results extraction failed' });
   }
 });
 

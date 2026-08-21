@@ -9,9 +9,15 @@
 import type Anthropic from '@anthropic-ai/sdk';
 import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
 import { z } from 'zod';
-import { EXTRACTION_SYSTEM_PROMPT, extractionUserPrompt, PROSE_SYSTEM_PROMPT } from './prompts.js';
+import {
+  EXTRACTION_SYSTEM_PROMPT,
+  extractionUserPrompt,
+  PROSE_SYSTEM_PROMPT,
+  RESULTS_EXTRACTION_SYSTEM_PROMPT,
+  resultsExtractionUserPrompt,
+} from './prompts.js';
 import { normaliseRing } from './ring.js';
-import type { Bird, ExtractedPedigree, PedigreeProse } from './types.js';
+import type { Bird, ExtractedPedigree, PedigreeProse, Result } from './types.js';
 
 // ---- Phase 1: extraction ---------------------------------------------------
 
@@ -130,6 +136,61 @@ export async function extractPedigree(client: Anthropic, model: string, file: So
     sourceFile: file.filename,
     rootBirdId,
     birds,
+    extractionNotes: parsed.extractionNotes || undefined,
+  };
+}
+
+// ---- Race results extraction (build brief follow-up) -----------------------
+// Same idea as Phase 1, scoped down to one bird's race-history table (e.g.
+// a screenshot of a oneloft results page) rather than a full pedigree scan.
+// Reuses ResultSchema verbatim so the shape matches Bird['results'] exactly.
+
+const ResultsExtractionSchema = z.object({
+  results: z.array(ResultSchema),
+  extractionNotes: z.string().describe('Caveats about the source itself (illegible rows, cropping). Empty string if none.'),
+});
+
+export interface ExtractedResults {
+  results: Result[];
+  extractionNotes?: string;
+}
+
+/**
+ * Extract race-history rows from a results-table image/PDF for one bird.
+ * Returns plain `Result[]` — the caller merges these into an existing
+ * bird's `results` array and the operator reviews/edits them in place,
+ * same as any other extracted field (build brief §7: never trust OCR
+ * output silently).
+ */
+export async function extractRaceResults(client: Anthropic, model: string, file: SourceFile): Promise<ExtractedResults> {
+  const response = await client.messages.parse({
+    model,
+    max_tokens: 8000,
+    system: RESULTS_EXTRACTION_SYSTEM_PROMPT,
+    messages: [
+      {
+        role: 'user',
+        content: [contentBlockFor(file), { type: 'text', text: resultsExtractionUserPrompt(file.filename) }],
+      },
+    ],
+    output_config: { format: zodOutputFormat(ResultsExtractionSchema), effort: 'high' },
+  });
+
+  const parsed = response.parsed_output;
+  if (!parsed) {
+    throw new Error('Results extraction failed to parse into the expected schema. Try a clearer screenshot.');
+  }
+
+  return {
+    results: parsed.results.map((r) => ({
+      race: r.race,
+      distanceKm: r.distanceKm ?? undefined,
+      year: r.year ?? undefined,
+      position: r.position ?? undefined,
+      poolSize: r.poolSize ?? undefined,
+      federation: r.federation ?? undefined,
+      raw: r.raw,
+    })),
     extractionNotes: parsed.extractionNotes || undefined,
   };
 }

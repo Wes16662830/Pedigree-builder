@@ -1,7 +1,7 @@
 // Thin fetch wrapper over the Express proxy. The frontend never talks to
 // Anthropic directly and never sees an API key (build brief §3/§8).
 
-import type { Bird, CrossReferenceReport, ExtractedPedigree, InbreedingResult, PedigreeProse } from '../../shared/types';
+import type { Bird, CrossReferenceReport, ExtractedPedigree, InbreedingResult, PedigreeProse, Result } from '../../shared/types';
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`/api${path}`, {
@@ -29,6 +29,20 @@ export function extractPedigreeFile(file: File): Promise<ExtractResponse> {
   const form = new FormData();
   form.append('file', file);
   return api('/extract', { method: 'POST', body: form });
+}
+
+export interface ExtractedResults {
+  results: Result[];
+  extractionNotes?: string;
+}
+
+// Paste/upload a screenshot of a race-history table (e.g. a oneloft results
+// extract) and get back parsed race rows to merge into a bird's results —
+// see BirdEditor's "Paste race results" widget.
+export function extractRaceResults(file: File): Promise<ExtractedResults> {
+  const form = new FormData();
+  form.append('file', file);
+  return api('/extract/results', { method: 'POST', body: form });
 }
 
 export function getUpload(uploadId: string) {

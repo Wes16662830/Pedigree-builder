@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { extractPedigree } from '../lib/anthropic.js';
+import { extractPedigree, extractRaceResults } from '../lib/anthropic.js';
 import { saveUpload, saveBirds, getUpload } from '../db.js';
 import type { Env } from '../env.js';
 
@@ -51,6 +51,34 @@ extractRouter.post('/', async (c) => {
   } catch (err) {
     console.error('[extract] failed:', err);
     return c.json({ error: err instanceof Error ? err.message : 'Extraction failed' }, 500);
+  }
+});
+
+// POST /api/extract/results — one race-history screenshot -> one vision
+// call, returning parsed Result[] for the caller to merge into a bird's
+// results. Not persisted to R2/D1 — it's a one-shot call, same as the
+// local server's in-memory version of this route.
+extractRouter.post('/results', async (c) => {
+  const form = await c.req.parseBody();
+  const file = form['file'];
+  if (!(file instanceof File)) {
+    return c.json({ error: 'No file uploaded. Field name must be "file".' }, 400);
+  }
+  if (!ACCEPTED_MIME.has(file.type)) {
+    return c.json({ error: `Unsupported file type: ${file.type}. Upload a PNG, JPEG, WEBP, or GIF screenshot.` }, 400);
+  }
+  if (file.size > MAX_BYTES) {
+    return c.json({ error: 'File too large (32MB max).' }, 400);
+  }
+
+  try {
+    const bytes = await file.arrayBuffer();
+    const base64 = Buffer.from(bytes).toString('base64');
+    const extracted = await extractRaceResults(c.env, { filename: file.name, mimeType: file.type, base64 });
+    return c.json(extracted);
+  } catch (err) {
+    console.error('[extract/results] failed:', err);
+    return c.json({ error: err instanceof Error ? err.message : 'Results extraction failed' }, 500);
   }
 });
 

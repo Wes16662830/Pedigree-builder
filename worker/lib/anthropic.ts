@@ -6,13 +6,13 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import * as shared from '../../shared/anthropic.js';
-import type { SourceFile, ProseInputBird } from '../../shared/anthropic.js';
+import type { SourceFile, ProseInputBird, ExtractedResults } from '../../shared/anthropic.js';
 import type { ExtractedPedigree, PedigreeProse } from '../../shared/types.js';
 import { ANTHROPIC_API_KEY_SETTING } from '../../shared/settings.js';
 import { getSetting } from '../db.js';
 import { DEFAULT_MODEL, type Env } from '../env.js';
 
-export type { SourceFile, ProseInputBird };
+export type { SourceFile, ProseInputBird, ExtractedResults };
 
 async function resolveApiKey(env: Env): Promise<string> {
   const key = (await getSetting(env.DB, ANTHROPIC_API_KEY_SETTING)) || env.ANTHROPIC_API_KEY;
@@ -25,6 +25,11 @@ async function resolveApiKey(env: Env): Promise<string> {
 export async function extractPedigree(env: Env, file: SourceFile): Promise<ExtractedPedigree> {
   const client = new Anthropic({ apiKey: await resolveApiKey(env) });
   return shared.extractPedigree(client, env.PEDIGREE_EXTRACTION_MODEL ?? DEFAULT_MODEL, file);
+}
+
+export async function extractRaceResults(env: Env, file: SourceFile): Promise<ExtractedResults> {
+  const client = new Anthropic({ apiKey: await resolveApiKey(env) });
+  return shared.extractRaceResults(client, env.PEDIGREE_EXTRACTION_MODEL ?? DEFAULT_MODEL, file);
 }
 
 export async function generateProse(env: Env, childRing: string, tree: ProseInputBird[], lineBreedingSummary: string[]): Promise<PedigreeProse> {

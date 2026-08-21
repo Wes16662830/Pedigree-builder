@@ -11,10 +11,10 @@ import { ANTHROPIC_API_KEY as ENV_API_KEY, EXTRACTION_MODEL, PROSE_MODEL } from 
 import { getSetting } from '../db.js';
 import { ANTHROPIC_API_KEY_SETTING } from '../../shared/settings.js';
 import * as shared from '../../shared/anthropic.js';
-import type { SourceFile, ProseInputBird } from '../../shared/anthropic.js';
+import type { SourceFile, ProseInputBird, ExtractedResults } from '../../shared/anthropic.js';
 import type { ExtractedPedigree, PedigreeProse } from '../../shared/types.js';
 
-export type { SourceFile, ProseInputBird };
+export type { SourceFile, ProseInputBird, ExtractedResults };
 
 function resolveApiKey(): string {
   const key = getSetting(ANTHROPIC_API_KEY_SETTING) || ENV_API_KEY;
@@ -40,6 +40,10 @@ function client(): Anthropic {
 
 export function extractPedigree(file: SourceFile): Promise<ExtractedPedigree> {
   return shared.extractPedigree(client(), EXTRACTION_MODEL, file);
+}
+
+export function extractRaceResults(file: SourceFile): Promise<ExtractedResults> {
+  return shared.extractRaceResults(client(), EXTRACTION_MODEL, file);
 }
 
 export function generateProse(childRing: string, tree: ProseInputBird[], lineBreedingSummary: string[]): Promise<PedigreeProse> {

@@ -29,6 +29,26 @@ export function extractionUserPrompt(filenameHint: string): string {
   return `Extract the full pedigree from the attached document (source file: "${filenameHint}"). Follow every rule in the system prompt exactly, especially: never infer a bird's sex from an ancestor's V/W marker, never invent a missing ring/result, and keep notes verbatim with translation in a separate field.`;
 }
 
+export const RESULTS_EXTRACTION_SYSTEM_PROMPT = `You are extracting a race results table for one racing pigeon from a results extract for OudeLuck Lofts — typically a screenshot from a oneloft race results site, a federation results page, or similar. Layouts vary (columns in different orders, different units, different languages) — read what is actually on the page rather than assuming a fixed layout.
+
+Return one entry in \`results\` per race row shown, in the order they appear on the page.
+
+Hard rules — these matter more than completeness:
+
+1. RAW IS ALWAYS FULL. \`raw\` must capture the complete row verbatim as text — race name, distance, date, arrival time, time difference, average speed, position, and anything else printed on that row — even fields that don't have their own structured column below. Never drop information into \`raw\` that you also could have, but didn't, put in a structured field.
+
+2. STRUCTURED FIELDS ONLY WHEN CLEARLY READABLE. Break out \`race\` (the race name), \`distanceKm\` (numeric distance in km — convert from the row if it's shown as e.g. "220 km", but never guess a unit that isn't stated), \`year\` (from the date shown, if any), \`position\` (finishing position/rank), \`poolSize\` (total birds in that race, if shown — this table format typically does NOT show it, so usually leave it null), and \`federation\` (if named). Leave any you can't read directly as null — do not compute, infer, or estimate one field from another (e.g. never derive a position from an average speed).
+
+3. NEVER INVENT. If the table has fewer or more columns than the ones described above, or a row is partially illegible, still record what IS legible and leave the rest null — never fabricate a row that isn't there, and never guess a digit you can't read.
+
+4. ONE BIRD. This extract is for a single bird — every row belongs to it. Do not attribute rows to different birds even if the source page has bird-selector chrome around the table.
+
+Use \`extractionNotes\` for caveats about the source itself (a row that's cut off, a column you couldn't read at all) — empty string if none.`;
+
+export function resultsExtractionUserPrompt(filenameHint: string): string {
+  return `Extract every race result row from the attached race-history table (source file: "${filenameHint}"). Follow every rule in the system prompt: keep \`raw\` complete for every row even where a structured field is also filled in, and never invent or compute a value that isn't directly readable.`;
+}
+
 export const PROSE_SYSTEM_PROMPT = `You are writing the narrative sections of an OudeLuck Lofts pedigree certificate for a child bird, from its already-verified merged ancestor tree (sire's side and dam's side, human-checked). Every fact you write MUST trace directly to a \`notes\`, \`notesEn\`, or \`results\` entry on a specific bird in the tree you were given. Do not add anything else, and do not soften this into "reads well" prose that loses precision — precision is the whole point, this goes to buyers.
 
 Rules:
