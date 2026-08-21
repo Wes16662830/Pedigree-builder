@@ -79,7 +79,11 @@ export default function SheetPage({ childPedigreeId, onBack }: Props) {
     function update() {
       if (!el) return;
       const available = el.clientWidth - PADDING;
-      setPreviewScale(editMode === 'layout' ? 1 : Math.min(1, available / canvasW));
+      const next = editMode === 'layout' ? 1 : Math.min(1, available / canvasW);
+      // Belt-and-braces against sub-pixel jitter feeding back into another
+      // observer firing: skip the update entirely if it wouldn't visibly
+      // change anything.
+      setPreviewScale((prev) => (Math.abs(prev - next) < 0.005 ? prev : next));
     }
     update();
     const observer = new ResizeObserver(update);
@@ -244,30 +248,41 @@ export default function SheetPage({ childPedigreeId, onBack }: Props) {
         </div>
       )}
 
-      <div ref={previewRef} className="overflow-auto rounded-lg border border-neutral-200 bg-neutral-100 p-6">
-        <div
-          className="sheet-preview-scale"
-          style={{
-            transform: `scale(${previewScale})`,
-            transformOrigin: 'top left',
-            width: geometryFor(currentTemplate.orientation).canvasW * previewScale,
-            height: geometryFor(currentTemplate.orientation).canvasH * previewScale,
-          }}
-        >
-          <PedigreeSheet
-            sheetRef={sheetRef}
-            child={child}
-            tree={tree}
-            prose={prose}
-            layout={layout}
-            editMode={editMode}
-            printVariant={printVariant}
-            ringFieldOrder={ringFieldOrder}
-            templateId={templateId}
-            loft={loft}
-            onLayoutChange={onLayoutChange}
-            onResetBox={onResetBox}
-          />
+      {/* previewRef measures THIS outer div, not the scrollable one below it
+          — deliberately: the inner div's own scrollbar can appear/disappear
+          as a side effect of the scale we compute from it, and on a browser
+          where scrollbars consume layout space, measuring the same element
+          you're scrolling creates a self-referential resize/rescale loop
+          (see git history — this is what "Maximum update depth exceeded"
+          on portrait templates turned out to be). This outer div has no
+          overflow/scroll of its own, so its width can never be affected by
+          anything happening inside it. */}
+      <div ref={previewRef}>
+        <div className="overflow-auto rounded-lg border border-neutral-200 bg-neutral-100 p-6">
+          <div
+            className="sheet-preview-scale"
+            style={{
+              transform: `scale(${previewScale})`,
+              transformOrigin: 'top left',
+              width: geometryFor(currentTemplate.orientation).canvasW * previewScale,
+              height: geometryFor(currentTemplate.orientation).canvasH * previewScale,
+            }}
+          >
+            <PedigreeSheet
+              sheetRef={sheetRef}
+              child={child}
+              tree={tree}
+              prose={prose}
+              layout={layout}
+              editMode={editMode}
+              printVariant={printVariant}
+              ringFieldOrder={ringFieldOrder}
+              templateId={templateId}
+              loft={loft}
+              onLayoutChange={onLayoutChange}
+              onResetBox={onResetBox}
+            />
+          </div>
         </div>
       </div>
       {previewScale < 1 && (

@@ -154,6 +154,7 @@ function Box({
   children,
   highlight,
   accent,
+  contentVersion,
 }: {
   boxId: string;
   x: number;
@@ -167,6 +168,11 @@ function Box({
   children: React.ReactNode;
   highlight?: boolean;
   accent: string;
+  // A cheap, stable signal that the box's actual content changed (each
+  // bird's own `updatedAt`) — see the measurement effect below for why
+  // this needs to be a real dependency rather than "just remeasure every
+  // render".
+  contentVersion: string;
 }) {
   const ov = overrideFor(layout, boxId);
   const dragRef = useRef<{ startX: number; startY: number; ox: number; oy: number } | null>(null);
@@ -234,25 +240,43 @@ function Box({
   // Auto-shrink dense content to fit its box, rather than relying on a
   // scrollbar (which hides text on screen) or letting print silently clip
   // it (a printed page can't scroll — build brief §7: never silently omit
-  // data). Measures against the *real* rendered content on every render,
-  // so it tracks box resizes, font-scale overrides, and edited text alike.
-  // If content still doesn't fit at the shrink floor, overflow switches to
-  // visible instead of hidden — the box will visually spill into its
-  // neighbour, but nothing is ever silently lost; the amber outline below
-  // (screen-only) flags it so the operator notices and fixes it by hand
-  // (drag/resize/font-scale), same as any other flagged-for-review field.
+  // data). If content still doesn't fit at the shrink floor, overflow
+  // switches to visible instead of hidden — the box will visually spill
+  // into its neighbour, but nothing is ever silently lost; the amber
+  // outline below (screen-only) flags it so the operator notices and
+  // fixes it by hand (drag/resize/font-scale), same as any other
+  // flagged-for-review field.
+  //
+  // Two things matter for this NOT to become a render loop (build brief
+  // regression: this shipped once causing "Maximum update depth exceeded"
+  // — see git history):
+  //  1. A real dependency array. Re-measuring on every single render
+  //     (including ones this box has nothing to do with) means any
+  //     borderline box that's ever unstable keeps re-triggering itself
+  //     indefinitely; this only re-measures when this box's own geometry,
+  //     font-scale, edit mode, or content could plausibly have changed.
+  //  2. Fixed, discrete shrink steps rather than an accumulating
+  //     `factor -= 0.08` loop. Repeated floating-point subtraction can
+  //     land on a very slightly different value from one run to the next
+  //     for the exact same content, which right at a text-wrap boundary
+  //     can flip `scrollHeight` by a whole line — i.e. the same content
+  //     measuring as "fits" on one run and "overflows" on the next,
+  //     oscillating forever. Snapping to a fixed step list makes the
+  //     result a pure function of the content: same input, same output.
+  const SHRINK_STEPS = [1, 0.92, 0.84, 0.76, 0.68, 0.6];
   useLayoutEffect(() => {
     const el = contentRef.current;
     if (!el) return;
-    const FLOOR = 0.6;
-    let factor = 1;
+    let stepIndex = 0;
     el.style.fontSize = '100%';
-    while (el.scrollHeight > el.clientHeight + 1 && factor > FLOOR) {
-      factor = Math.max(FLOOR, factor - 0.08);
-      el.style.fontSize = `${factor * 100}%`;
+    while (el.scrollHeight > el.clientHeight + 1 && stepIndex < SHRINK_STEPS.length - 1) {
+      stepIndex += 1;
+      el.style.fontSize = `${SHRINK_STEPS[stepIndex] * 100}%`;
     }
-    setOverflowing(el.scrollHeight > el.clientHeight + 1);
-  });
+    const nowOverflowing = el.scrollHeight > el.clientHeight + 1;
+    setOverflowing((prev) => (prev === nowOverflowing ? prev : nowOverflowing));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [w, h, ov.fontScale, editMode, contentVersion]);
 
   return (
     <div
@@ -580,6 +604,7 @@ export default function PedigreeSheet({
           onResetBox={onResetBox}
           highlight={box.generation === 0}
           accent={accent}
+          contentVersion={box.generation === 0 ? `${child.updatedAt ?? ''}:${JSON.stringify(prose).length}` : (box.bird.updatedAt ?? box.bird.id)}
         >
           {box.generation === 0 ? (
             <ChildBoxBody child={child} prose={prose} ringFieldOrder={ringFieldOrder} accent={accent} photoMaxHeight={tmpl.photoMaxHeight} />
