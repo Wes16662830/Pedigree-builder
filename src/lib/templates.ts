@@ -17,6 +17,7 @@ export interface SheetTemplate {
   orientation: Orientation;
   decorative?: boolean; // ornate double border + serif header, "certificate" look
   photoMaxHeight?: number; // child photo cap in px; default 110
+  paperTint?: string; // subtle page background; default white
 }
 
 export const TEMPLATES: SheetTemplate[] = [
@@ -74,6 +75,7 @@ export const TEMPLATES: SheetTemplate[] = [
     ink: '#1C1917',
     layoutKind: 'list',
     orientation: 'portrait',
+    paperTint: '#FDFAF5',
   },
   {
     id: 'certificate-ivory',
@@ -84,6 +86,7 @@ export const TEMPLATES: SheetTemplate[] = [
     layoutKind: 'tree',
     orientation: 'portrait',
     decorative: true,
+    paperTint: '#FBF6EA',
   },
 ];
 

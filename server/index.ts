@@ -9,6 +9,7 @@ import { crossrefRouter } from './routes/crossref.js';
 import { exportRouter } from './routes/export.js';
 import { settingsRouter } from './routes/settings.js';
 import { foldersRouter } from './routes/folders.js';
+import { backupRouter } from './routes/backup.js';
 import './db.js'; // ensures schema is applied on startup
 
 const app = express();
@@ -29,6 +30,7 @@ app.use('/api/crossref', crossrefRouter);
 app.use('/api/pedigrees', exportRouter);
 app.use('/api/settings', settingsRouter);
 app.use('/api/folders', foldersRouter);
+app.use('/api/backup', backupRouter);
 
 // Multer / general error fallback — keeps failures as JSON instead of an
 // HTML stack trace leaking to the frontend.

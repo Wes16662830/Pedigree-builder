@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { clearApiKey, clearLoftLogo, getSettings, saveApiKey, saveLoftSettings, type SettingsInfo } from '../lib/api';
+import { clearApiKey, clearLoftLogo, getBackup, getSettings, restoreBackup, saveApiKey, saveLoftSettings, type SettingsInfo } from '../lib/api';
+import type { RestoreSummary } from '../../shared/backup';
 
 const MAX_LOGO_BYTES = 1024 * 1024; // must match server/worker MAX_LOGO_BYTES
 
@@ -26,6 +27,11 @@ export default function SettingsPage() {
   const [loftError, setLoftError] = useState<string>();
   const [loftSavedJustNow, setLoftSavedJustNow] = useState(false);
   const logoInputRef = useRef<HTMLInputElement>(null);
+
+  const [backupBusy, setBackupBusy] = useState(false);
+  const [backupError, setBackupError] = useState<string>();
+  const [restoreSummary, setRestoreSummary] = useState<RestoreSummary>();
+  const restoreInputRef = useRef<HTMLInputElement>(null);
 
   function load() {
     getSettings()
@@ -111,6 +117,44 @@ export default function SettingsPage() {
       setLoftError(e instanceof Error ? e.message : 'Failed to remove logo');
     } finally {
       setLoftBusy(false);
+    }
+  }
+
+  async function downloadBackup() {
+    setBackupBusy(true);
+    setBackupError(undefined);
+    setRestoreSummary(undefined);
+    try {
+      const backup = await getBackup();
+      const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `pedigree-builder-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setBackupError(e instanceof Error ? e.message : 'Backup failed');
+    } finally {
+      setBackupBusy(false);
+    }
+  }
+
+  async function restoreFromFile(file: File) {
+    setBackupBusy(true);
+    setBackupError(undefined);
+    setRestoreSummary(undefined);
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text);
+      const summary = await restoreBackup(parsed);
+      setRestoreSummary(summary);
+    } catch (e) {
+      setBackupError(e instanceof Error ? e.message : 'Restore failed — is this a Pedigree Builder backup file?');
+    } finally {
+      setBackupBusy(false);
     }
   }
 
@@ -254,6 +298,51 @@ export default function SettingsPage() {
       </div>
 
       {loftError && <p className="mt-3 text-sm text-red-600">{loftError}</p>}
+
+      <h2 className="mb-1 mt-10 text-xl font-semibold">Backup</h2>
+      <p className="mb-4 text-sm text-neutral-500">
+        Every bird, pedigree, folder, and loft setting as one JSON file — not photos or original scans, and never your API key. Restoring only
+        adds/overwrites by id, so it's safe to run against a database that already has data in it; it never deletes anything.
+      </p>
+
+      <div className="space-y-3 rounded-lg border border-neutral-200 bg-white p-5">
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={downloadBackup}
+            disabled={backupBusy}
+            className="rounded-md px-4 py-2 text-sm font-medium text-white disabled:opacity-40"
+            style={{ background: '#111111' }}
+          >
+            {backupBusy ? 'Working…' : 'Download backup'}
+          </button>
+          <button
+            onClick={() => restoreInputRef.current?.click()}
+            disabled={backupBusy}
+            className="rounded-md border px-3 py-2 text-sm disabled:opacity-40"
+          >
+            Restore from file…
+          </button>
+          <input
+            ref={restoreInputRef}
+            type="file"
+            accept="application/json"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) restoreFromFile(file);
+              e.target.value = '';
+            }}
+          />
+        </div>
+        {restoreSummary && (
+          <p className="text-sm text-green-600">
+            Restored {restoreSummary.birds} bird{restoreSummary.birds === 1 ? '' : 's'}, {restoreSummary.folders} folder
+            {restoreSummary.folders === 1 ? '' : 's'}, {restoreSummary.uploads} upload{restoreSummary.uploads === 1 ? '' : 's'}, and{' '}
+            {restoreSummary.childPedigrees} pedigree{restoreSummary.childPedigrees === 1 ? '' : 's'}.
+          </p>
+        )}
+        {backupError && <p className="text-sm text-red-600">{backupError}</p>}
+      </div>
     </div>
   );
 }

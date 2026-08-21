@@ -244,6 +244,10 @@ export function getUpload(id: string): UploadRow | undefined {
   return db.prepare('SELECT * FROM uploads WHERE id = ?').get(id) as UploadRow | undefined;
 }
 
+export function getAllUploads(): UploadRow[] {
+  return db.prepare('SELECT * FROM uploads ORDER BY created_at').all() as UploadRow[];
+}
+
 export function setUploadVerified(id: string, verified: boolean): void {
   db.prepare(`UPDATE uploads SET verified = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?`).run(verified ? 1 : 0, id);
 }
@@ -342,6 +346,16 @@ export function createFolder(id: string, name: string): FolderRow {
 
 export function renameFolder(id: string, name: string): void {
   db.prepare(`UPDATE folders SET name = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?`).run(name, id);
+}
+
+// Upsert-by-id, unlike createFolder's plain INSERT — used by backup
+// restore, where the folder may already exist (re-importing the same
+// backup, or importing into a database that already has some overlap).
+export function upsertFolder(id: string, name: string): void {
+  db.prepare(
+    `INSERT INTO folders (id, name) VALUES (?, ?)
+     ON CONFLICT(id) DO UPDATE SET name = excluded.name, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')`,
+  ).run(id, name);
 }
 
 // Deletes the folder only — pedigrees inside it fall back to "unfiled"

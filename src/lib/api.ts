@@ -2,6 +2,7 @@
 // Anthropic directly and never sees an API key (build brief §3/§8).
 
 import type { Bird, CrossReferenceReport, ExtractedPedigree, InbreedingResult, PedigreeProse, Result } from '../../shared/types';
+import type { BackupFile, RestoreSummary } from '../../shared/backup';
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`/api${path}`, {
@@ -252,4 +253,12 @@ export function saveApiKey(anthropicApiKey: string): Promise<SettingsInfo> {
 
 export function clearApiKey(): Promise<SettingsInfo> {
   return api('/settings/api-key', { method: 'DELETE' });
+}
+
+export function getBackup(): Promise<BackupFile> {
+  return api('/backup');
+}
+
+export function restoreBackup(backup: BackupFile): Promise<RestoreSummary> {
+  return api('/backup/restore', { method: 'POST', body: JSON.stringify(backup) });
 }

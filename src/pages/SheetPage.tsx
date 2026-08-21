@@ -117,76 +117,93 @@ export default function SheetPage({ childPedigreeId, onBack }: Props) {
   if (error) return <p className="text-sm text-red-600">{error}</p>;
   if (!child || !prose) return <p className="text-sm text-neutral-500">Loading…</p>;
 
+  const currentTemplate = templateById(templateId);
+
   return (
     <div>
-      <div className="no-print mb-4 flex flex-wrap items-center gap-2">
-        <button onClick={onBack} className="rounded-md border px-3 py-1.5 text-sm">
+      <div className="no-print mb-4 flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-neutral-200 bg-white p-2.5">
+        <button onClick={onBack} className="rounded-md border px-3 py-1.5 text-sm hover:bg-neutral-50">
           ← Back
         </button>
 
-        <div className="ml-2 flex overflow-hidden rounded-md border text-sm">
-          {(['view', 'text', 'layout'] as EditMode[]).map((m) => (
-            <button
-              key={m}
-              onClick={() => setEditMode(m)}
-              className={`px-3 py-1.5 capitalize ${editMode === m ? 'bg-neutral-900 text-white' : 'bg-white'}`}
-            >
-              {m}
-            </button>
-          ))}
+        <div className="flex overflow-hidden rounded-md border text-sm">
+          <button
+            onClick={() => setEditMode('view')}
+            title="Read-only preview — what you'll print or export"
+            className={`px-3 py-1.5 ${editMode === 'view' ? 'bg-neutral-900 text-white' : 'bg-white hover:bg-neutral-50'}`}
+          >
+            View
+          </button>
+          <button
+            onClick={() => setEditMode('text')}
+            title="Click directly into any text on the sheet and edit it in place"
+            className={`border-l px-3 py-1.5 ${editMode === 'text' ? 'bg-neutral-900 text-white' : 'bg-white hover:bg-neutral-50'}`}
+          >
+            Text
+          </button>
+          <button
+            onClick={() => setEditMode('layout')}
+            title="Drag boxes to reposition, resize by the corner handle, and adjust font size per box"
+            className={`border-l px-3 py-1.5 ${editMode === 'layout' ? 'bg-neutral-900 text-white' : 'bg-white hover:bg-neutral-50'}`}
+          >
+            Layout
+          </button>
         </div>
 
-        <label className="ml-2 flex items-center gap-1 text-sm" title={templateById(templateId).description}>
-          Template:
-          <select className="rounded border px-2 py-1" value={templateId} onChange={(e) => onTemplateChange(e.target.value)}>
-            {TEMPLATES.map((t) => (
-              <option key={t.id} value={t.id} title={t.description}>
-                {t.label} · {t.orientation === 'portrait' ? 'portrait' : 'landscape'}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        <label className="flex items-center gap-1 text-sm">
-          Print:
-          <select className="rounded border px-2 py-1" value={printVariant} onChange={(e) => setPrintVariant(e.target.value as PrintVariant)}>
-            <option value="black-header">Black header</option>
-            <option value="white-panel">White panel (inkjet-friendly)</option>
-          </select>
-        </label>
-
-        <label className="flex items-center gap-1 text-sm">
-          Ring order:
-          <select className="rounded border px-2 py-1" value={ringFieldOrder} onChange={(e) => setRingFieldOrder(e.target.value as RingFieldOrder)}>
-            <option value="ring-year">ring, then year</option>
-            <option value="year-ring">year, then ring</option>
-          </select>
-        </label>
-
         {editMode === 'layout' && (
-          <button onClick={resetAll} className="rounded-md border px-3 py-1.5 text-sm">
+          <button onClick={resetAll} className="rounded-md border px-3 py-1.5 text-sm hover:bg-neutral-50">
             Reset all layout
           </button>
         )}
 
-        <button onClick={() => setShowChildEditor((v) => !v)} className="rounded-md border px-3 py-1.5 text-sm">
+        <button onClick={() => setShowChildEditor((v) => !v)} className="rounded-md border px-3 py-1.5 text-sm hover:bg-neutral-50">
           {showChildEditor ? 'Hide child editor' : 'Edit child details / results'}
         </button>
 
         <div className="ml-auto flex gap-2">
-          <button disabled={saving} onClick={saveLayout} className="rounded-md border px-3 py-1.5 text-sm disabled:opacity-40">
+          <button disabled={saving} onClick={saveLayout} className="rounded-md border px-3 py-1.5 text-sm hover:bg-neutral-50 disabled:opacity-40">
             {saving ? 'Saving…' : 'Save'}
           </button>
-          <button onClick={() => window.print()} className="rounded-md border px-3 py-1.5 text-sm">
+          <button onClick={() => window.print()} className="rounded-md border px-3 py-1.5 text-sm hover:bg-neutral-50">
             Print / Save as PDF
           </button>
           <button onClick={doExport} className="rounded-md px-3 py-1.5 text-sm font-medium text-white" style={{ background: '#111111' }}>
             Export HTML
           </button>
         </div>
+
+        <div className="flex w-full flex-wrap items-center gap-x-4 gap-y-2 border-t border-neutral-100 pt-2.5 text-sm">
+          <label className="flex items-center gap-1.5" title={currentTemplate.description}>
+            <span className="text-neutral-500">Template</span>
+            <span className="inline-block h-3 w-3 flex-shrink-0 rounded-full border border-black/10" style={{ background: currentTemplate.accent }} />
+            <select className="rounded border px-2 py-1" value={templateId} onChange={(e) => onTemplateChange(e.target.value)}>
+              {TEMPLATES.map((t) => (
+                <option key={t.id} value={t.id} title={t.description}>
+                  {t.label} · {t.orientation === 'portrait' ? 'portrait' : 'landscape'}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="flex items-center gap-1.5" title="Which colour the header band prints in — 'White panel' saves ink on a home inkjet">
+            <span className="text-neutral-500">Print style</span>
+            <select className="rounded border px-2 py-1" value={printVariant} onChange={(e) => setPrintVariant(e.target.value as PrintVariant)}>
+              <option value="black-header">Black header</option>
+              <option value="white-panel">White panel (inkjet-friendly)</option>
+            </select>
+          </label>
+
+          <label className="flex items-center gap-1.5" title="How ring numbers are formatted throughout the sheet">
+            <span className="text-neutral-500">Ring order</span>
+            <select className="rounded border px-2 py-1" value={ringFieldOrder} onChange={(e) => setRingFieldOrder(e.target.value as RingFieldOrder)}>
+              <option value="ring-year">ring, then year</option>
+              <option value="year-ring">year, then ring</option>
+            </select>
+          </label>
+        </div>
       </div>
 
-      <p className="no-print mb-4 -mt-2 text-xs text-neutral-500">{templateById(templateId).description}</p>
+      <p className="no-print mb-4 text-xs text-neutral-500">{currentTemplate.description}</p>
 
       {showChildEditor && (
         <div className="no-print mb-4 max-w-xl">

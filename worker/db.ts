@@ -198,6 +198,11 @@ export async function getUpload(db: D1Database, id: string): Promise<UploadRow |
   return row ?? undefined;
 }
 
+export async function getAllUploads(db: D1Database): Promise<UploadRow[]> {
+  const { results } = await db.prepare('SELECT * FROM uploads ORDER BY created_at').all<UploadRow>();
+  return results;
+}
+
 export async function setUploadVerified(db: D1Database, id: string, verified: boolean): Promise<void> {
   await db
     .prepare(`UPDATE uploads SET verified = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?`)
@@ -311,6 +316,18 @@ export async function createFolder(db: D1Database, id: string, name: string): Pr
 
 export async function renameFolder(db: D1Database, id: string, name: string): Promise<void> {
   await db.prepare(`UPDATE folders SET name = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now') WHERE id = ?`).bind(name, id).run();
+}
+
+// Upsert-by-id — used by backup restore, where the folder may already
+// exist (re-importing the same backup, or overlapping with existing data).
+export async function upsertFolder(db: D1Database, id: string, name: string): Promise<void> {
+  await db
+    .prepare(
+      `INSERT INTO folders (id, name) VALUES (?, ?)
+       ON CONFLICT(id) DO UPDATE SET name = excluded.name, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ','now')`,
+    )
+    .bind(id, name)
+    .run();
 }
 
 // Deletes the folder only — pedigrees inside it fall back to "unfiled".

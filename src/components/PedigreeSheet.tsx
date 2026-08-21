@@ -48,24 +48,32 @@ function ResultLine({ raw, missing }: { raw: string; missing: boolean }) {
 
 function AncestorBoxBody({ bird, ringFieldOrder }: { bird: Bird; ringFieldOrder: RingFieldOrder }) {
   return (
-    <div>
-      {bird.photoUrl && <img src={bird.photoUrl} alt={bird.ring} style={{ width: '100%', maxHeight: 60, objectFit: 'cover', borderRadius: 3, marginBottom: 3 }} />}
-      <div style={{ fontWeight: 700 }}>{displayRing(bird.ring, ringFieldOrder)}</div>
-      {bird.name && <div style={{ fontStyle: 'italic' }}>"{bird.name}"</div>}
-      <div>
+    <div style={{ lineHeight: 1.35 }}>
+      {bird.photoUrl && <img src={bird.photoUrl} alt={bird.ring} style={{ width: '100%', maxHeight: 60, objectFit: 'cover', borderRadius: 3, marginBottom: 4 }} />}
+      <div style={{ fontWeight: 700, marginBottom: 1 }}>{displayRing(bird.ring, ringFieldOrder)}</div>
+      {bird.name && <div style={{ fontStyle: 'italic', marginBottom: 1 }}>"{bird.name}"</div>}
+      <div style={{ color: '#444' }}>
         {bird.sex === 'unknown' ? <span style={{ color: RED, fontStyle: 'italic' }}>sex: unknown</span> : bird.sex}
         {bird.colour ? ` · ${bird.colour}` : ''}
       </div>
-      {bird.breeder && <div style={{ opacity: 0.8 }}>{bird.breeder}</div>}
-      {bird.notes.map((n, i) => (
-        <div key={i} style={{ fontSize: '0.85em', opacity: 0.85, marginTop: 2 }}>
-          {n}
-          {bird.notesEn?.[i] && <div style={{ fontStyle: 'italic', opacity: 0.7 }}>({bird.notesEn[i]})</div>}
+      {bird.breeder && <div style={{ color: '#666' }}>{bird.breeder}</div>}
+      {bird.notes.length > 0 && (
+        <div style={{ marginTop: 3, borderTop: '1px solid #eee', paddingTop: 2 }}>
+          {bird.notes.map((n, i) => (
+            <div key={i} style={{ fontSize: '0.85em', color: '#555', marginTop: i > 0 ? 2 : 0 }}>
+              {n}
+              {bird.notesEn?.[i] && <div style={{ fontStyle: 'italic', color: '#888' }}>({bird.notesEn[i]})</div>}
+            </div>
+          ))}
         </div>
-      ))}
-      {bird.results.map((r, i) => (
-        <ResultLine key={i} raw={r.raw} missing={r.position === undefined && r.poolSize === undefined} />
-      ))}
+      )}
+      {bird.results.length > 0 && (
+        <div style={{ marginTop: 3, borderTop: '1px solid #eee', paddingTop: 2 }}>
+          {bird.results.map((r, i) => (
+            <ResultLine key={i} raw={r.raw} missing={r.position === undefined && r.poolSize === undefined} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -83,39 +91,47 @@ function ChildBoxBody({
   accent: string;
   photoMaxHeight?: number;
 }) {
+  const sectionHeading: React.CSSProperties = {
+    fontWeight: 700,
+    fontSize: '0.85em',
+    color: accent,
+    letterSpacing: 0.6,
+    marginTop: 10,
+    marginBottom: 3,
+  };
   return (
-    <div>
+    <div style={{ lineHeight: 1.4 }}>
       {child.photoUrl && (
-        <img src={child.photoUrl} alt={child.ring} style={{ width: '100%', maxHeight: photoMaxHeight, objectFit: 'cover', borderRadius: 4, marginBottom: 6 }} />
+        <img src={child.photoUrl} alt={child.ring} style={{ width: '100%', maxHeight: photoMaxHeight, objectFit: 'cover', borderRadius: 4, marginBottom: 8 }} />
       )}
       <div style={{ fontSize: 18, fontWeight: 800 }}>{displayRing(child.ring, ringFieldOrder)}</div>
-      {child.name && <div style={{ fontStyle: 'italic', fontSize: 14 }}>"{child.name}"</div>}
-      <div style={{ marginTop: 2 }}>
+      {child.name && <div style={{ fontStyle: 'italic', fontSize: 14, marginTop: 1 }}>"{child.name}"</div>}
+      <div style={{ marginTop: 3, color: '#444' }}>
         {child.sex === 'unknown' ? <span style={{ color: RED, fontStyle: 'italic' }}>sex: unknown</span> : child.sex}
         {child.colour ? ` · ${child.colour}` : ''}
       </div>
-      {child.breeder && <div style={{ opacity: 0.85 }}>{child.breeder}</div>}
-      {child.loftAddress && <div style={{ fontSize: '0.85em', opacity: 0.7 }}>{child.loftAddress}</div>}
+      {child.breeder && <div style={{ color: '#666' }}>{child.breeder}</div>}
+      {child.loftAddress && <div style={{ fontSize: '0.85em', color: '#888' }}>{child.loftAddress}</div>}
 
-      <hr style={{ margin: '8px 0', borderColor: '#ddd' }} />
+      <hr style={{ margin: '10px 0 0', borderColor: '#ddd' }} />
 
-      <div style={{ fontWeight: 700, fontSize: '0.9em', color: accent }}>BREEDING</div>
-      <p style={{ fontSize: '0.85em', marginBottom: 6 }}>{prose.breeding}</p>
+      <div style={{ ...sectionHeading, marginTop: 8 }}>BREEDING</div>
+      <p style={{ fontSize: '0.85em', marginBottom: 0 }}>{prose.breeding}</p>
 
-      <div style={{ fontWeight: 700, fontSize: '0.9em', color: accent }}>LINE-BREEDING OF NOTE</div>
-      <p style={{ fontSize: '0.85em', marginBottom: 6 }}>{prose.lineBreedingOfNote || <span style={{ color: RED, fontStyle: 'italic' }}>none detected</span>}</p>
+      <div style={sectionHeading}>LINE-BREEDING OF NOTE</div>
+      <p style={{ fontSize: '0.85em', marginBottom: 0 }}>{prose.lineBreedingOfNote || <span style={{ color: RED, fontStyle: 'italic' }}>none detected</span>}</p>
 
-      <div style={{ fontWeight: 700, fontSize: '0.9em', color: accent }}>SIRE'S OWN RECORD</div>
-      <p style={{ fontSize: '0.85em', marginBottom: 6 }}>{prose.sireOwnRecord}</p>
+      <div style={sectionHeading}>SIRE'S OWN RECORD</div>
+      <p style={{ fontSize: '0.85em', marginBottom: 0 }}>{prose.sireOwnRecord}</p>
 
-      <div style={{ fontWeight: 700, fontSize: '0.9em', color: accent }}>DAM'S OWN RECORD</div>
-      <p style={{ fontSize: '0.85em', marginBottom: 6 }}>{prose.damOwnRecord}</p>
+      <div style={sectionHeading}>DAM'S OWN RECORD</div>
+      <p style={{ fontSize: '0.85em', marginBottom: 0 }}>{prose.damOwnRecord}</p>
 
       {prose.loftCredentials.length > 0 && (
         <>
-          <div style={{ fontWeight: 700, fontSize: '0.9em', color: accent }}>LOFT CREDENTIALS</div>
+          <div style={sectionHeading}>LOFT CREDENTIALS</div>
           {prose.loftCredentials.map((c, i) => (
-            <p key={i} style={{ fontSize: '0.8em', marginBottom: 3 }}>
+            <p key={i} style={{ fontSize: '0.8em', marginBottom: i === prose.loftCredentials.length - 1 ? 0 : 4 }}>
               <strong>{c.loftName}:</strong> {c.claim}
             </p>
           ))}
@@ -206,6 +222,13 @@ function Box({
 
   const isOverridden = ov.dx !== 0 || ov.dy !== 0 || ov.scale !== 1 || ov.fontScale !== 1;
 
+  // Base text size scales gently with the box's own height — a spacious
+  // box (the child card, a generation-1 ancestor) reads more comfortably
+  // a little larger, while an already-tight box (deep generations, a
+  // dense list row) stays at the original floor rather than shrinking
+  // further. Per-box A-/A+ overrides still layer on top of this.
+  const baseFont = Math.min(14, Math.max(11, 11 + (h - 100) / 150));
+
   return (
     <div
       data-box-id={boxId}
@@ -221,12 +244,13 @@ function Box({
         transformOrigin: 'top left',
         border: `1px solid ${highlight ? accent : '#ccc'}`,
         boxSizing: 'border-box',
-        padding: 4,
-        paddingTop: editMode === 'layout' ? 20 : 4,
+        padding: 6,
+        paddingTop: editMode === 'layout' ? 22 : 6,
         overflow: 'auto',
-        fontSize: `${11 * ov.fontScale}px`,
+        fontSize: `${baseFont * ov.fontScale}px`,
         background: '#fff',
-        outline: editMode === 'layout' ? '1px dashed transparent' : undefined,
+        outline: editMode === 'layout' ? '1px dashed #cbd5e1' : undefined,
+        outlineOffset: editMode === 'layout' ? -1 : undefined,
         cursor: editMode === 'layout' ? 'move' : undefined,
       }}
       onMouseDown={startDrag}
@@ -238,7 +262,7 @@ function Box({
         <div
           contentEditable={false}
           className="no-print"
-          style={{ position: 'absolute', top: 2, right: 2, display: 'flex', gap: 2, background: 'rgba(255,255,255,0.9)' }}
+          style={{ position: 'absolute', top: 2, right: 2, display: 'flex', gap: 2, background: 'rgba(255,255,255,0.92)', borderRadius: 3 }}
         >
           <button
             title="Smaller text"
@@ -257,7 +281,7 @@ function Box({
             A+
           </button>
           {isOverridden && (
-            <button title="Reset this box" onMouseDown={(e) => e.stopPropagation()} onClick={() => onResetBox(boxId)} style={miniBtn}>
+            <button title="Reset this box to its default position/size" onMouseDown={(e) => e.stopPropagation()} onClick={() => onResetBox(boxId)} style={miniBtn}>
               ↺
             </button>
           )}
@@ -273,12 +297,21 @@ function Box({
             position: 'absolute',
             right: 0,
             bottom: 0,
-            width: 10,
-            height: 10,
+            width: 15,
+            height: 15,
             background: accent,
+            borderRadius: '3px 0 3px 0',
             cursor: 'nwse-resize',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: '#fff',
+            fontSize: 9,
+            lineHeight: 1,
           }}
-        />
+        >
+          ⤡
+        </div>
       )}
     </div>
   );
@@ -287,8 +320,9 @@ function Box({
 const miniBtn: React.CSSProperties = {
   fontSize: 10,
   lineHeight: 1,
-  padding: '2px 4px',
+  padding: '3px 5px',
   border: '1px solid #999',
+  borderRadius: 3,
   background: '#fff',
   cursor: 'pointer',
 };
@@ -333,6 +367,8 @@ export default function PedigreeSheet({
   const damStartY = damBoxes.length ? Math.min(...damBoxes.map((b) => b.y)) : geo.contentY + geo.contentH / 2;
 
   const borderInset = tmpl.decorative ? 12 : 0;
+  const paperTint = tmpl.paperTint ?? '#fff';
+  const logoRadius = tmpl.decorative ? '50%' : 6;
 
   return (
     <div
@@ -344,7 +380,7 @@ export default function PedigreeSheet({
         position: 'relative',
         width: geo.canvasW,
         height: geo.canvasH,
-        background: '#fff',
+        background: paperTint,
         fontFamily,
         color: INK,
         margin: '0 auto',
@@ -396,14 +432,14 @@ export default function PedigreeSheet({
           <img
             src={loft.logoDataUrl}
             alt={loftName}
-            style={{ width: 56, height: 56, borderRadius: 6, objectFit: 'cover', marginRight: 16, flexShrink: 0 }}
+            style={{ width: 56, height: 56, borderRadius: logoRadius, objectFit: 'cover', marginRight: 16, flexShrink: 0 }}
           />
         ) : (
           <div
             style={{
               width: 56,
               height: 56,
-              borderRadius: 6,
+              borderRadius: logoRadius,
               background: accent,
               display: 'flex',
               alignItems: 'center',
@@ -439,23 +475,40 @@ export default function PedigreeSheet({
           ancestor boxes actually landed (see dividerX1/2, sireStartY,
           damStartY above) so it works for both the 'tree' layout's
           top/bottom bands and the 'list' layout's single stacked column. */}
-      {damBoxes.length > 0 && (
-        <div
-          style={{
-            position: 'absolute',
-            left: dividerX1,
-            top: damStartY - 3,
-            width: dividerX2 - dividerX1,
-            height: 2,
-            background: '#eee',
-          }}
-        />
-      )}
+      {damBoxes.length > 0 &&
+        (tmpl.decorative ? (
+          <div
+            style={{
+              position: 'absolute',
+              left: dividerX1,
+              top: damStartY - 4,
+              width: dividerX2 - dividerX1,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+            }}
+          >
+            <div style={{ flex: 1, height: 1, background: accent, opacity: 0.5 }} />
+            <span style={{ color: accent, fontSize: 8 }}>◆</span>
+            <div style={{ flex: 1, height: 1, background: accent, opacity: 0.5 }} />
+          </div>
+        ) : (
+          <div
+            style={{
+              position: 'absolute',
+              left: dividerX1,
+              top: damStartY - 3,
+              width: dividerX2 - dividerX1,
+              height: 2,
+              background: '#eee',
+            }}
+          />
+        ))}
       {sireBoxes.length > 0 && (
-        <div style={{ position: 'absolute', left: dividerX1, top: sireStartY - 14, fontSize: 10, fontWeight: 700, color: accent }}>SIRE'S SIDE</div>
+        <div style={{ position: 'absolute', left: dividerX1, top: sireStartY - 14, fontSize: 10, fontWeight: 700, color: accent }}>♂ SIRE'S SIDE</div>
       )}
       {damBoxes.length > 0 && (
-        <div style={{ position: 'absolute', left: dividerX1, top: damStartY + 2, fontSize: 10, fontWeight: 700, color: accent }}>DAM'S SIDE</div>
+        <div style={{ position: 'absolute', left: dividerX1, top: damStartY + 3, fontSize: 10, fontWeight: 700, color: accent }}>♀ DAM'S SIDE</div>
       )}
 
       {boxes.map((box) => (
