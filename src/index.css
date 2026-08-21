@@ -47,6 +47,19 @@
     margin: 0 !important;
     box-shadow: none !important;
   }
+
+  /* SheetPage.tsx scales the on-screen preview down to fit the panel
+     width (see previewScale) by wrapping the sheet in a `transform:
+     scale()` div — a transform on an ancestor creates a new containing
+     block for the sheet's `position: absolute` above, which would
+     silently break the page-origin pin. Neutralised here so print/export
+     always uses the sheet's true, unscaled size regardless of what the
+     screen preview was showing. */
+  .sheet-preview-scale {
+    transform: none !important;
+    width: auto !important;
+    height: auto !important;
+  }
 }
 
 .pedigree-sheet {

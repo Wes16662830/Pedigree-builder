@@ -8,6 +8,7 @@ import type { LayoutState } from '../lib/layout';
 import { buildExportHtml, downloadHtml } from '../lib/exportHtml';
 import { TEMPLATES, DEFAULT_TEMPLATE_ID, templateById } from '../lib/templates';
 import { setPrintPageSize } from '../lib/printPageSize';
+import { geometryFor } from '../lib/layout';
 
 interface Props {
   childPedigreeId: string;
@@ -28,6 +29,8 @@ export default function SheetPage({ childPedigreeId, onBack }: Props) {
   const [error, setError] = useState<string>();
   const [saving, setSaving] = useState(false);
   const sheetRef = useRef<HTMLDivElement>(null);
+  const previewRef = useRef<HTMLDivElement>(null);
+  const [previewScale, setPreviewScale] = useState(1);
 
   useEffect(() => {
     getChildPedigree(childPedigreeId)
@@ -53,6 +56,36 @@ export default function SheetPage({ childPedigreeId, onBack }: Props) {
   useEffect(() => {
     setPrintPageSize(templateById(templateId).orientation);
   }, [templateId]);
+
+  // Shrink the on-screen preview to fit the available width, rather than
+  // showing a landscape (or portrait) sheet wider than the panel and
+  // requiring a horizontal scroll to see the rest of the header/ring
+  // number. Purely visual — the underlying sheet DOM (and so print/export)
+  // stays at true size; see the .sheet-preview-scale print override in
+  // index.css. Disabled in Layout edit mode, where drag/resize math
+  // assumes real screen pixels == the sheet's own coordinate space.
+  //
+  // `child` is in the dependency list not because its value matters here,
+  // but because `previewRef` isn't attached to anything until the
+  // "Loading…" early-return below gives way to the real sheet markup —
+  // without this, the effect's first (only) run finds `previewRef.current`
+  // still null, and never fires again once the DOM actually mounts if
+  // `templateId`/`editMode` happen not to change afterward.
+  useEffect(() => {
+    const el = previewRef.current;
+    if (!el) return;
+    const canvasW = geometryFor(templateById(templateId).orientation).canvasW;
+    const PADDING = 48; // matches the preview panel's p-6 (24px each side)
+    function update() {
+      if (!el) return;
+      const available = el.clientWidth - PADDING;
+      setPreviewScale(editMode === 'layout' ? 1 : Math.min(1, available / canvasW));
+    }
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [templateId, editMode, child]);
 
   function onLayoutChange(id: string, patch: Partial<LayoutState[string]>) {
     setLayout((prev) => ({ ...prev, [id]: { ...prev[id], ...patch } }));
@@ -211,22 +244,35 @@ export default function SheetPage({ childPedigreeId, onBack }: Props) {
         </div>
       )}
 
-      <div className="overflow-auto rounded-lg border border-neutral-200 bg-neutral-100 p-6">
-        <PedigreeSheet
-          sheetRef={sheetRef}
-          child={child}
-          tree={tree}
-          prose={prose}
-          layout={layout}
-          editMode={editMode}
-          printVariant={printVariant}
-          ringFieldOrder={ringFieldOrder}
-          templateId={templateId}
-          loft={loft}
-          onLayoutChange={onLayoutChange}
-          onResetBox={onResetBox}
-        />
+      <div ref={previewRef} className="overflow-auto rounded-lg border border-neutral-200 bg-neutral-100 p-6">
+        <div
+          className="sheet-preview-scale"
+          style={{
+            transform: `scale(${previewScale})`,
+            transformOrigin: 'top left',
+            width: geometryFor(currentTemplate.orientation).canvasW * previewScale,
+            height: geometryFor(currentTemplate.orientation).canvasH * previewScale,
+          }}
+        >
+          <PedigreeSheet
+            sheetRef={sheetRef}
+            child={child}
+            tree={tree}
+            prose={prose}
+            layout={layout}
+            editMode={editMode}
+            printVariant={printVariant}
+            ringFieldOrder={ringFieldOrder}
+            templateId={templateId}
+            loft={loft}
+            onLayoutChange={onLayoutChange}
+            onResetBox={onResetBox}
+          />
+        </div>
       </div>
+      {previewScale < 1 && (
+        <p className="no-print mt-2 text-center text-xs text-neutral-400">Shown at {Math.round(previewScale * 100)}% to fit — prints/exports at full size.</p>
+      )}
     </div>
   );
 }

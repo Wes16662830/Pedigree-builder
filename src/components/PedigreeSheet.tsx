@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import type { Bird } from '../../shared/types';
 import type { PedigreeProse } from '../../shared/types';
 import type { RingFieldOrder } from '../../shared/ring';
@@ -171,6 +171,8 @@ function Box({
   const ov = overrideFor(layout, boxId);
   const dragRef = useRef<{ startX: number; startY: number; ox: number; oy: number } | null>(null);
   const resizeRef = useRef<{ startX: number; startY: number; scale: number } | null>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
+  const [overflowing, setOverflowing] = useState(false);
 
   function startDrag(e: React.MouseEvent) {
     if (editMode !== 'layout') return;
@@ -229,6 +231,29 @@ function Box({
   // further. Per-box A-/A+ overrides still layer on top of this.
   const baseFont = Math.min(14, Math.max(11, 11 + (h - 100) / 150));
 
+  // Auto-shrink dense content to fit its box, rather than relying on a
+  // scrollbar (which hides text on screen) or letting print silently clip
+  // it (a printed page can't scroll — build brief §7: never silently omit
+  // data). Measures against the *real* rendered content on every render,
+  // so it tracks box resizes, font-scale overrides, and edited text alike.
+  // If content still doesn't fit at the shrink floor, overflow switches to
+  // visible instead of hidden — the box will visually spill into its
+  // neighbour, but nothing is ever silently lost; the amber outline below
+  // (screen-only) flags it so the operator notices and fixes it by hand
+  // (drag/resize/font-scale), same as any other flagged-for-review field.
+  useLayoutEffect(() => {
+    const el = contentRef.current;
+    if (!el) return;
+    const FLOOR = 0.6;
+    let factor = 1;
+    el.style.fontSize = '100%';
+    while (el.scrollHeight > el.clientHeight + 1 && factor > FLOOR) {
+      factor = Math.max(FLOOR, factor - 0.08);
+      el.style.fontSize = `${factor * 100}%`;
+    }
+    setOverflowing(el.scrollHeight > el.clientHeight + 1);
+  });
+
   return (
     <div
       data-box-id={boxId}
@@ -244,19 +269,43 @@ function Box({
         transformOrigin: 'top left',
         border: `1px solid ${highlight ? accent : '#ccc'}`,
         boxSizing: 'border-box',
-        padding: 6,
-        paddingTop: editMode === 'layout' ? 22 : 6,
-        overflow: 'auto',
-        fontSize: `${baseFont * ov.fontScale}px`,
         background: '#fff',
-        outline: editMode === 'layout' ? '1px dashed #cbd5e1' : undefined,
-        outlineOffset: editMode === 'layout' ? -1 : undefined,
         cursor: editMode === 'layout' ? 'move' : undefined,
+        // An overflowing box's content spills past its own slot into
+        // whatever's below it (see contentRef's overflow:visible above) —
+        // lift it above and give it a shadow so that reads as "this card
+        // is floating over its lane on purpose" rather than a rendering
+        // glitch or the box below going missing.
+        zIndex: overflowing ? 5 : undefined,
+        boxShadow: overflowing ? '0 2px 10px rgba(0,0,0,0.18)' : undefined,
       }}
       onMouseDown={startDrag}
       className="pedigree-box"
     >
-      {children}
+      <div
+        ref={contentRef}
+        style={{
+          position: 'absolute',
+          inset: 0,
+          padding: 6,
+          paddingTop: editMode === 'layout' ? 22 : 6,
+          boxSizing: 'border-box',
+          overflow: overflowing ? 'visible' : 'hidden',
+          fontSize: `${baseFont * ov.fontScale}px`,
+          outline: editMode === 'layout' ? '1px dashed #cbd5e1' : undefined,
+          outlineOffset: editMode === 'layout' ? -1 : undefined,
+        }}
+      >
+        {children}
+      </div>
+
+      {overflowing && (
+        <div
+          title="This box's content doesn't fit — drag its corner to resize, or use A− to shrink the text, so nothing prints cut off."
+          className="no-print"
+          style={{ position: 'absolute', inset: 0, border: '2px solid #f59e0b', pointerEvents: 'none' }}
+        />
+      )}
 
       {editMode === 'layout' && (
         <div
@@ -408,7 +457,12 @@ export default function PedigreeSheet({
         </>
       )}
 
-      {/* Header band */}
+      {/* Header band. overflow:hidden here is a deliberate safety net: the
+          loft name/subtitle/address are free-text from Settings and can be
+          arbitrarily long, so the middle block below is what truncates
+          (ellipsis) under pressure — never the ring number on the right,
+          which is load-bearing (it's what identifies which bird this sheet
+          is for) and is never allowed to be pushed off-canvas. */}
       <div
         style={{
           position: 'absolute',
@@ -423,6 +477,7 @@ export default function PedigreeSheet({
           padding: '0 20px',
           borderBottom: `4px solid ${accent}`,
           boxSizing: 'border-box',
+          overflow: 'hidden',
         }}
       >
         {/* Logo: the loft's own uploaded mark (Settings → Loft) when set,
@@ -459,15 +514,15 @@ export default function PedigreeSheet({
               .toUpperCase() || 'OL'}
           </div>
         )}
-        <div>
-          <div style={{ fontSize: 22, fontWeight: 800, letterSpacing: 0.5 }}>{loftName}</div>
-          <div style={{ fontSize: 12, color: accent }}>
+        <div style={{ minWidth: 0, flexShrink: 1, overflow: 'hidden' }}>
+          <div style={{ fontSize: 22, fontWeight: 800, letterSpacing: 0.5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{loftName}</div>
+          <div style={{ fontSize: 12, color: accent, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
             {loftSubtitle} · {loftAddress}
           </div>
         </div>
-        <div style={{ marginLeft: 'auto', textAlign: 'right' }}>
-          <div style={{ fontSize: 12, opacity: 0.8 }}>Pedigree Certificate</div>
-          <div style={{ fontSize: 16, fontWeight: 700 }}>{displayRing(child.ring, ringFieldOrder)}</div>
+        <div style={{ marginLeft: 'auto', paddingLeft: 12, textAlign: 'right', flexShrink: 0 }}>
+          <div style={{ fontSize: 12, opacity: 0.8, whiteSpace: 'nowrap' }}>Pedigree Certificate</div>
+          <div style={{ fontSize: 16, fontWeight: 700, whiteSpace: 'nowrap' }}>{displayRing(child.ring, ringFieldOrder)}</div>
         </div>
       </div>
 
