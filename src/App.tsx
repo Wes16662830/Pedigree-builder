@@ -9,6 +9,7 @@ import SheetPage from './pages/SheetPage';
 import CrossReferencePage from './pages/CrossReferencePage';
 import SettingsPage from './pages/SettingsPage';
 import BirdLibraryPage from './pages/BirdLibraryPage';
+import ErrorBoundary from './components/ErrorBoundary';
 
 export type ParentSide = 'sire' | 'dam';
 
@@ -108,6 +109,9 @@ export default function App() {
       </header>
 
       <main className="mx-auto max-w-6xl px-6 py-8">
+        {/* Keyed to the view so a crash on one page doesn't stay tripped
+            after navigating elsewhere — see ErrorBoundary.tsx. */}
+        <ErrorBoundary key={JSON.stringify(view)}>
         {view.name === 'home' && (
           <HomePage
             onNew={() => {
@@ -157,6 +161,7 @@ export default function App() {
         {view.name === 'library' && <BirdLibraryPage onOpenPedigree={(childPedigreeId) => setView({ name: 'sheet', childPedigreeId })} />}
 
         {view.name === 'settings' && <SettingsPage />}
+        </ErrorBoundary>
       </main>
     </div>
   );
