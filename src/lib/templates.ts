@@ -5,7 +5,7 @@
 // pedigree layout" follow-up. editMode, printVariant, and per-box
 // drag/resize overrides work the same regardless of which one is picked.
 
-import type { LayoutKind, Orientation } from './layout';
+import type { HeaderStyle, LayoutKind, Orientation } from './layout';
 
 export interface SheetTemplate {
   id: string;
@@ -18,6 +18,7 @@ export interface SheetTemplate {
   decorative?: boolean; // ornate double border + serif header, "certificate" look
   photoMaxHeight?: number; // child photo cap in px; default 110
   paperTint?: string; // subtle page background; default white
+  headerStyle?: HeaderStyle; // 'band' (default) across the top, or 'sidebar' down the left edge
 }
 
 export const TEMPLATES: SheetTemplate[] = [
@@ -87,6 +88,17 @@ export const TEMPLATES: SheetTemplate[] = [
     orientation: 'portrait',
     decorative: true,
     paperTint: '#FBF6EA',
+  },
+  {
+    id: 'loft-sidebar',
+    label: 'Loft Sidebar',
+    description:
+      'A dark charcoal column down the left edge carries the logo and loft details instead of a top band, freeing the full width above the ancestry for the chart itself — modeled on a real loft’s own printed pedigree design.',
+    accent: '#D19A45',
+    ink: '#111111',
+    layoutKind: 'tree',
+    orientation: 'landscape',
+    headerStyle: 'sidebar',
   },
 ];
 

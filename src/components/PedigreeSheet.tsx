@@ -450,7 +450,7 @@ export default function PedigreeSheet({
 }: Props) {
   const indexById = new Map(tree.map((b) => [b.id, b]));
   const tmpl = templateById(templateId);
-  const geo = geometryFor(tmpl.orientation);
+  const geo = geometryFor(tmpl.orientation, tmpl.headerStyle);
   const boxes = buildBoxes(child, indexById, tmpl.layoutKind, geo);
   const repeatColorMap = buildRepeatColorMap(tree, child.id);
 
@@ -460,6 +460,13 @@ export default function PedigreeSheet({
   const loftName = loft?.name?.trim() || DEFAULT_LOFT_NAME;
   const loftSubtitle = loft?.subtitle?.trim() || DEFAULT_LOFT_SUBTITLE;
   const loftAddress = loft?.address?.trim() || DEFAULT_LOFT_ADDRESS;
+  const loftInitials =
+    loftName
+      .split(/\s+/)
+      .map((w) => w[0])
+      .join('')
+      .slice(0, 2)
+      .toUpperCase() || 'OL';
   const fontFamily = tmpl.decorative ? 'Georgia, "Times New Roman", serif' : 'Arial, Helvetica, sans-serif';
 
   // Divider between sire's and dam's side, positioned from where the
@@ -469,7 +476,7 @@ export default function PedigreeSheet({
   const ancestorBoxes = boxes.filter((b) => b.generation > 0);
   const sireBoxes = ancestorBoxes.filter((b) => b.band === 'sire');
   const damBoxes = ancestorBoxes.filter((b) => b.band === 'dam');
-  const dividerX1 = ancestorBoxes.length ? Math.min(...ancestorBoxes.map((b) => b.x)) : geo.marginX;
+  const dividerX1 = ancestorBoxes.length ? Math.min(...ancestorBoxes.map((b) => b.x)) : geo.contentX;
   const dividerX2 = ancestorBoxes.length ? Math.max(...ancestorBoxes.map((b) => b.x + b.w)) : geo.canvasW - geo.marginX;
   const sireStartY = sireBoxes.length ? Math.min(...sireBoxes.map((b) => b.y)) : geo.contentY;
   const damStartY = damBoxes.length ? Math.min(...damBoxes.map((b) => b.y)) : geo.contentY + geo.contentH / 2;
@@ -516,74 +523,144 @@ export default function PedigreeSheet({
         </>
       )}
 
-      {/* Header band. overflow:hidden here is a deliberate safety net: the
-          loft name/subtitle/address are free-text from Settings and can be
-          arbitrarily long, so the middle block below is what truncates
-          (ellipsis) under pressure — never the ring number on the right,
-          which is load-bearing (it's what identifies which bird this sheet
-          is for) and is never allowed to be pushed off-canvas. */}
-      <div
-        style={{
-          position: 'absolute',
-          left: 0,
-          top: 0,
-          width: geo.canvasW,
-          height: geo.headerH,
-          background: headerBg,
-          color: headerFg,
-          display: 'flex',
-          alignItems: 'center',
-          padding: '0 20px',
-          borderBottom: `4px solid ${accent}`,
-          boxSizing: 'border-box',
-          overflow: 'hidden',
-        }}
-      >
-        {/* Logo: the loft's own uploaded mark (Settings → Loft) when set,
-            otherwise a plain initial-letter placeholder in the template's
-            accent colour — kept inline so the sheet stays self-contained. */}
-        {loft?.logoDataUrl ? (
-          <img
-            src={loft.logoDataUrl}
-            alt={loftName}
-            style={{ width: 56, height: 56, borderRadius: logoRadius, objectFit: 'cover', marginRight: 16, flexShrink: 0 }}
-          />
-        ) : (
-          <div
-            style={{
-              width: 56,
-              height: 56,
-              borderRadius: logoRadius,
-              background: accent,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: INK,
-              fontWeight: 900,
-              fontSize: 20,
-              marginRight: 16,
-              flexShrink: 0,
-            }}
-          >
-            {loftName
-              .split(/\s+/)
-              .map((w) => w[0])
-              .join('')
-              .slice(0, 2)
-              .toUpperCase() || 'OL'}
+      {tmpl.headerStyle === 'sidebar' ? (
+        /* Sidebar branding column, per a real loft's own printed pedigree
+           (build brief follow-up: "make a template like these examples").
+           Runs the full height of the sheet down the left edge instead of
+           a top band, so the ancestry chart gets the full canvas width.
+           Same never-truncate-the-ring rule as the band: the ring block
+           is pinned to the bottom of a flex column rather than squeezed
+           by long free-text name/address above it. */
+        <div
+          style={{
+            position: 'absolute',
+            left: 0,
+            top: 0,
+            width: geo.sidebarW,
+            height: geo.canvasH,
+            background: headerBg,
+            color: headerFg,
+            borderRight: `4px solid ${accent}`,
+            boxSizing: 'border-box',
+            padding: '22px 16px',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+          }}
+        >
+          {loft?.logoDataUrl ? (
+            <img src={loft.logoDataUrl} alt={loftName} style={{ width: 72, height: 72, borderRadius: logoRadius, objectFit: 'cover', marginBottom: 16, flexShrink: 0 }} />
+          ) : (
+            <div
+              style={{
+                width: 72,
+                height: 72,
+                borderRadius: logoRadius,
+                background: accent,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: INK,
+                fontWeight: 900,
+                fontSize: 24,
+                marginBottom: 16,
+                flexShrink: 0,
+              }}
+            >
+              {loftInitials}
+            </div>
+          )}
+          <div style={{ minHeight: 0, overflow: 'hidden' }}>
+            <div
+              style={{
+                fontSize: 19,
+                fontWeight: 800,
+                letterSpacing: 0.3,
+                lineHeight: 1.25,
+                overflow: 'hidden',
+                display: '-webkit-box',
+                WebkitLineClamp: 3,
+                WebkitBoxOrient: 'vertical',
+              }}
+            >
+              {loftName}
+            </div>
+            <div style={{ fontSize: 12, color: accent, marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{loftSubtitle}</div>
+            <div style={{ fontSize: 10.5, opacity: 0.75, marginTop: 6, lineHeight: 1.4 }}>{loftAddress}</div>
           </div>
-        )}
-        <div style={{ minWidth: 0, flexShrink: 1, overflow: 'hidden' }}>
-          <div style={{ fontSize: 22, fontWeight: 800, letterSpacing: 0.5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{loftName}</div>
-          <div style={{ fontSize: 12, color: accent, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            {loftSubtitle} · {loftAddress}
+
+          <div style={{ flex: 1, minHeight: 12 }} />
+
+          <div style={{ borderTop: `1px solid ${accent}`, paddingTop: 10, flexShrink: 0 }}>
+            <div style={{ fontSize: 10, opacity: 0.7, letterSpacing: 0.8 }}>PEDIGREE CERTIFICATE</div>
+            <div style={{ fontSize: 19, fontWeight: 800, marginTop: 3, wordBreak: 'break-word' }}>{displayRing(child.ring, ringFieldOrder)}</div>
           </div>
         </div>
-        <div style={{ marginLeft: 'auto', paddingLeft: 12, textAlign: 'right', flexShrink: 0 }}>
-          <div style={{ fontSize: 12, opacity: 0.8, whiteSpace: 'nowrap' }}>Pedigree Certificate</div>
-          <div style={{ fontSize: 16, fontWeight: 700, whiteSpace: 'nowrap' }}>{displayRing(child.ring, ringFieldOrder)}</div>
+      ) : (
+        /* Header band. overflow:hidden here is a deliberate safety net: the
+           loft name/subtitle/address are free-text from Settings and can be
+           arbitrarily long, so the middle block below is what truncates
+           (ellipsis) under pressure — never the ring number on the right,
+           which is load-bearing (it's what identifies which bird this sheet
+           is for) and is never allowed to be pushed off-canvas. */
+        <div
+          style={{
+            position: 'absolute',
+            left: 0,
+            top: 0,
+            width: geo.canvasW,
+            height: geo.headerH,
+            background: headerBg,
+            color: headerFg,
+            display: 'flex',
+            alignItems: 'center',
+            padding: '0 20px',
+            borderBottom: `4px solid ${accent}`,
+            boxSizing: 'border-box',
+            overflow: 'hidden',
+          }}
+        >
+          {/* Logo: the loft's own uploaded mark (Settings → Loft) when set,
+              otherwise a plain initial-letter placeholder in the template's
+              accent colour — kept inline so the sheet stays self-contained. */}
+          {loft?.logoDataUrl ? (
+            <img
+              src={loft.logoDataUrl}
+              alt={loftName}
+              style={{ width: 56, height: 56, borderRadius: logoRadius, objectFit: 'cover', marginRight: 16, flexShrink: 0 }}
+            />
+          ) : (
+            <div
+              style={{
+                width: 56,
+                height: 56,
+                borderRadius: logoRadius,
+                background: accent,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: INK,
+                fontWeight: 900,
+                fontSize: 20,
+                marginRight: 16,
+                flexShrink: 0,
+              }}
+            >
+              {loftInitials}
+            </div>
+          )}
+          <div style={{ minWidth: 0, flexShrink: 1, overflow: 'hidden' }}>
+            <div style={{ fontSize: 22, fontWeight: 800, letterSpacing: 0.5, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{loftName}</div>
+            <div style={{ fontSize: 12, color: accent, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+              {loftSubtitle} · {loftAddress}
+            </div>
+          </div>
+          <div style={{ marginLeft: 'auto', paddingLeft: 12, textAlign: 'right', flexShrink: 0 }}>
+            <div style={{ fontSize: 12, opacity: 0.8, whiteSpace: 'nowrap' }}>Pedigree Certificate</div>
+            <div style={{ fontSize: 16, fontWeight: 700, whiteSpace: 'nowrap' }}>{displayRing(child.ring, ringFieldOrder)}</div>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Sire's-side / dam's-side divider, positioned from wherever the
           ancestor boxes actually landed (see dividerX1/2, sireStartY,

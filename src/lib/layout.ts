@@ -13,40 +13,76 @@
 // Both algorithms return the same PedigreeBox[] shape, so everything
 // downstream (Box, drag/resize overrides, per-box font scale) is unaware
 // of which one produced a given box.
+//
+// Orthogonal to layoutKind is headerStyle — where the loft's own branding
+// sits: the original horizontal 'band' across the top, or a 'sidebar' down
+// the left edge (per a reference sample template request — a real loft's
+// own pedigree design used a dark left column for logo/contact info
+// instead of a top band). Either way the content area (child + ancestor
+// grid) fills whatever's left; buildTreeBoxes/buildListBoxes place boxes
+// from `contentX`/`contentY`, never assuming the header eats space from
+// the top specifically.
 
 import type { Bird, PedigreeSide } from '../../shared/types';
 
 export type LayoutKind = 'tree' | 'list';
 export type Orientation = 'landscape' | 'portrait';
+export type HeaderStyle = 'band' | 'sidebar';
 
 const HEADER_H = 92;
+const SIDEBAR_W = 200;
 const MARGIN_X = 16;
 const BOTTOM_GAP = 26;
 
 export interface SheetGeometry {
   canvasW: number;
   canvasH: number;
-  headerH: number;
+  headerH: number; // 0 when headerStyle is 'sidebar'
+  sidebarW: number; // 0 when headerStyle is 'band'
   marginX: number;
-  contentY: number; // top of the content area, below the header band
+  contentX: number; // left edge of the content area (accounts for a sidebar)
+  contentY: number; // top of the content area (accounts for a header band)
   contentH: number;
   contentW: number;
   orientation: Orientation;
+  headerStyle: HeaderStyle;
 }
 
-export function geometryFor(orientation: Orientation): SheetGeometry {
+export function geometryFor(orientation: Orientation, headerStyle: HeaderStyle = 'band'): SheetGeometry {
   const canvasW = orientation === 'landscape' ? 1122 : 793; // A4 @ 96dpi, either way up
   const canvasH = orientation === 'landscape' ? 793 : 1122;
+
+  if (headerStyle === 'sidebar') {
+    const contentX = SIDEBAR_W + MARGIN_X;
+    const contentY = MARGIN_X;
+    return {
+      canvasW,
+      canvasH,
+      headerH: 0,
+      sidebarW: SIDEBAR_W,
+      marginX: MARGIN_X,
+      contentX,
+      contentY,
+      contentH: canvasH - contentY - BOTTOM_GAP,
+      contentW: canvasW - contentX - MARGIN_X,
+      orientation,
+      headerStyle,
+    };
+  }
+
   const contentY = HEADER_H + 10;
   return {
     canvasW,
     canvasH,
     headerH: HEADER_H,
+    sidebarW: 0,
     marginX: MARGIN_X,
+    contentX: MARGIN_X,
     contentY,
     contentH: canvasH - contentY - BOTTOM_GAP,
     contentW: canvasW - 2 * MARGIN_X,
     orientation,
+    headerStyle,
   };
 }
 
@@ -69,7 +105,7 @@ function buildTreeBoxes(child: Bird, indexById: Map<string, Bird>, geo: SheetGeo
   const childW = 172;
   const colW = (geo.contentW - childW) / MAX_GENERATIONS;
 
-  const boxes: PedigreeBox[] = [{ id: child.id, bird: child, x: geo.marginX, y: geo.contentY, w: childW, h: geo.contentH, generation: 0 }];
+  const boxes: PedigreeBox[] = [{ id: child.id, bird: child, x: geo.contentX, y: geo.contentY, w: childW, h: geo.contentH, generation: 0 }];
 
   function place(id: string | undefined, band: 'sire' | 'dam', path: PedigreeSide[], generation: number) {
     if (!id || generation > MAX_GENERATIONS) return;
@@ -85,7 +121,7 @@ function buildTreeBoxes(child: Bird, indexById: Map<string, Bird>, geo: SheetGeo
     let rowIndex = 0;
     for (const step of subPath) rowIndex = rowIndex * 2 + (step === 'dam' ? 1 : 0);
 
-    const x = geo.marginX + childW + (generation - 1) * colW;
+    const x = geo.contentX + childW + (generation - 1) * colW;
     const y = bandY + rowIndex * rowH;
 
     boxes.push({ id: bird.id, bird, x, y, w: colW, h: rowH, generation, band });
@@ -111,7 +147,7 @@ function buildListBoxes(child: Bird, indexById: Map<string, Bird>, geo: SheetGeo
   const listH = geo.contentH - childSpan - gap;
   const indentStep = 28; // px of left-indent per generation deep
 
-  const boxes: PedigreeBox[] = [{ id: child.id, bird: child, x: geo.marginX, y: geo.contentY, w: geo.contentW, h: childSpan, generation: 0 }];
+  const boxes: PedigreeBox[] = [{ id: child.id, bird: child, x: geo.contentX, y: geo.contentY, w: geo.contentW, h: childSpan, generation: 0 }];
 
   interface Entry {
     bird: Bird;
@@ -137,7 +173,7 @@ function buildListBoxes(child: Bird, indexById: Map<string, Bird>, geo: SheetGeo
     boxes.push({
       id: entry.bird.id,
       bird: entry.bird,
-      x: geo.marginX + indent,
+      x: geo.contentX + indent,
       y: listY + i * rowH,
       w: geo.contentW - indent,
       h: rowH,
