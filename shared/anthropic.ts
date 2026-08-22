@@ -19,6 +19,34 @@ import {
 import { normaliseRing } from './ring.js';
 import type { Bird, ExtractedPedigree, PedigreeProse, Result } from './types.js';
 
+// The Anthropic SDK's structured-output helper throws its own low-level
+// error — e.g. "Failed to parse structured output as JSON: Unterminated
+// string in JSON at position 5911" — when the model's response gets cut
+// off by max_tokens before it finishes writing the JSON. That's a real
+// failure mode for a large merged tree (many ancestors, each with notes
+// and results folded into the prompt) driving a long prose response, and
+// the raw SDK message gives the end user no idea what actually happened
+// or what to do about it. Wrapping every structured call the same way
+// turns that into something actionable instead.
+async function parseStructured<T>(promise: Promise<{ parsed_output: T | null }>, context: string): Promise<T> {
+  let response: { parsed_output: T | null };
+  try {
+    response = await promise;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (/unterminated string|unexpected end of json|position \d+/i.test(message)) {
+      throw new Error(
+        `${context}: the model's response was too long and got cut off before it finished. Try again — if it keeps happening on this same pedigree, it likely needs a larger token budget than this app currently requests.`,
+      );
+    }
+    throw err;
+  }
+  if (!response.parsed_output) {
+    throw new Error(`${context}: the response didn't match the expected format. Try again.`);
+  }
+  return response.parsed_output;
+}
+
 // ---- Phase 1: extraction ---------------------------------------------------
 
 const ResultSchema = z.object({
@@ -79,23 +107,21 @@ function contentBlockFor(file: SourceFile): Anthropic.ImageBlockParam | Anthropi
  * UUIDs and `verified: false` — nothing here is trusted until Phase 2.
  */
 export async function extractPedigree(client: Anthropic, model: string, file: SourceFile): Promise<ExtractedPedigree> {
-  const response = await client.messages.parse({
-    model,
-    max_tokens: 16000,
-    system: EXTRACTION_SYSTEM_PROMPT,
-    messages: [
-      {
-        role: 'user',
-        content: [contentBlockFor(file), { type: 'text', text: extractionUserPrompt(file.filename) }],
-      },
-    ],
-    output_config: { format: zodOutputFormat(ExtractionResultSchema), effort: 'high' },
-  });
-
-  const parsed = response.parsed_output;
-  if (!parsed) {
-    throw new Error('Extraction failed to parse into the expected schema. Try re-uploading, or a clearer scan.');
-  }
+  const parsed = await parseStructured(
+    client.messages.parse({
+      model,
+      max_tokens: 16000,
+      system: EXTRACTION_SYSTEM_PROMPT,
+      messages: [
+        {
+          role: 'user',
+          content: [contentBlockFor(file), { type: 'text', text: extractionUserPrompt(file.filename) }],
+        },
+      ],
+      output_config: { format: zodOutputFormat(ExtractionResultSchema), effort: 'high' },
+    }),
+    'Pedigree extraction',
+  );
 
   const idMap = new Map<string, string>(); // localId -> real uuid
   for (const b of parsed.birds) idMap.set(b.localId, crypto.randomUUID());
@@ -163,23 +189,21 @@ export interface ExtractedResults {
  * output silently).
  */
 export async function extractRaceResults(client: Anthropic, model: string, file: SourceFile): Promise<ExtractedResults> {
-  const response = await client.messages.parse({
-    model,
-    max_tokens: 8000,
-    system: RESULTS_EXTRACTION_SYSTEM_PROMPT,
-    messages: [
-      {
-        role: 'user',
-        content: [contentBlockFor(file), { type: 'text', text: resultsExtractionUserPrompt(file.filename) }],
-      },
-    ],
-    output_config: { format: zodOutputFormat(ResultsExtractionSchema), effort: 'high' },
-  });
-
-  const parsed = response.parsed_output;
-  if (!parsed) {
-    throw new Error('Results extraction failed to parse into the expected schema. Try a clearer screenshot.');
-  }
+  const parsed = await parseStructured(
+    client.messages.parse({
+      model,
+      max_tokens: 12000,
+      system: RESULTS_EXTRACTION_SYSTEM_PROMPT,
+      messages: [
+        {
+          role: 'user',
+          content: [contentBlockFor(file), { type: 'text', text: resultsExtractionUserPrompt(file.filename) }],
+        },
+      ],
+      output_config: { format: zodOutputFormat(ResultsExtractionSchema), effort: 'high' },
+    }),
+    'Results extraction',
+  );
 
   return {
     results: parsed.results.map((r) => ({
@@ -249,22 +273,26 @@ export async function generateProse(
     ? `Line-breeding already detected mechanically in this tree:\n${lineBreedingSummary.map((s) => `- ${s}`).join('\n')}`
     : 'No repeated ancestors were detected in this tree.';
 
-  const response = await client.messages.parse({
-    model,
-    max_tokens: 8000,
-    system: PROSE_SYSTEM_PROMPT,
-    output_config: { format: zodOutputFormat(ProseResultSchema), effort: 'high' },
-    messages: [
-      {
-        role: 'user',
-        content: `Child bird ring: ${childRing}\n\n${lineBreedingText}\n\nFull merged tree:\n\n${treeText}`,
-      },
-    ],
-  });
-
-  const parsed = response.parsed_output;
-  if (!parsed) {
-    throw new Error('Prose generation failed to parse into the expected schema.');
-  }
-  return parsed;
+  return parseStructured(
+    client.messages.parse({
+      model,
+      // A full 4-generation tree is up to ~31 birds, each contributing its
+      // ring/notes/results into the prompt below — the prose response
+      // (breeding/line-breeding/both parents' own records/loft credentials)
+      // scales with that, and 8000 wasn't enough headroom for a dense real
+      // tree: the model's response got cut off mid-JSON, which the SDK
+      // surfaces as a bare "Unterminated string in JSON" parse error (see
+      // parseStructured above for turning that into something readable).
+      max_tokens: 16000,
+      system: PROSE_SYSTEM_PROMPT,
+      output_config: { format: zodOutputFormat(ProseResultSchema), effort: 'high' },
+      messages: [
+        {
+          role: 'user',
+          content: `Child bird ring: ${childRing}\n\n${lineBreedingText}\n\nFull merged tree:\n\n${treeText}`,
+        },
+      ],
+    }),
+    'Prose generation',
+  );
 }
