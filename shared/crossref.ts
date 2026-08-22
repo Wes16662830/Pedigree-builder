@@ -133,6 +133,27 @@ export function findSiblings(allBirds: Bird[]): SiblingMatch[] {
   return matches;
 }
 
+/**
+ * Which bird ids within one already-merged tree represent the same
+ * physical ancestor appearing more than once (matched by ringNormalised,
+ * same rule as findLineBreeding) — grouped for the sheet to colour-code,
+ * so an operator can see at a glance which boxes are "the same bird"
+ * without reading the prose (build brief follow-up: mirrors the boxed
+ * colour-coding convention some source pedigree software already uses).
+ * Only ancestor rows are considered — a coincidental ring match on the
+ * child itself isn't a "repeated ancestor".
+ */
+export function repeatedAncestorGroups(tree: Bird[], childId: string): string[][] {
+  const groups = new Map<string, string[]>();
+  for (const b of tree) {
+    if (b.id === childId || !b.ringNormalised) continue;
+    const list = groups.get(b.ringNormalised) ?? [];
+    list.push(b.id);
+    groups.set(b.ringNormalised, list);
+  }
+  return [...groups.values()].filter((ids) => ids.length >= 2);
+}
+
 export function buildCrossReferenceReport(allBirds: Bird[]): CrossReferenceReport {
   return {
     sharedAncestors: findSharedAncestors(allBirds),

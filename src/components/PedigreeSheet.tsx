@@ -6,6 +6,7 @@ import { formatRing, parseRingTokens } from '../../shared/ring';
 import type { LoftSettings } from '../lib/api';
 import { templateById } from '../lib/templates';
 import { buildBoxes, geometryFor, overrideFor, type LayoutState } from '../lib/layout';
+import { repeatedAncestorGroups } from '../../shared/crossref';
 
 export type EditMode = 'view' | 'text' | 'layout';
 export type PrintVariant = 'black-header' | 'white-panel';
@@ -30,6 +31,26 @@ const RED = '#dc2626';
 const DEFAULT_LOFT_NAME = 'OudeLuck Lofts';
 const DEFAULT_LOFT_SUBTITLE = 'OneLoft Genetics';
 const DEFAULT_LOFT_ADDRESS = 'Athlone Farm, Tarkastad, Eastern Cape';
+
+// Repeated-ancestor highlight colours — the same convention some source
+// pedigree software already uses (build brief follow-up): every box for
+// the same physical ancestor, wherever it recurs in the tree, gets the
+// same background tint so line-breeding is visible at a glance, not just
+// described in the prose. Cycled by group index; if a tree has more
+// distinct repeated ancestors than colours, colours repeat — acceptable,
+// the prose text underneath still spells out exactly which bird and
+// generations each one is.
+const REPEAT_HIGHLIGHT_COLORS = ['#DBEAFE', '#FEF3C7', '#D1FAE5', '#FCE7F3', '#E9D5FF', '#FFEDD5', '#E5E7EB', '#CFFAFE'];
+
+function buildRepeatColorMap(tree: Bird[], childId: string): Map<string, string> {
+  const groups = repeatedAncestorGroups(tree, childId);
+  const map = new Map<string, string>();
+  groups.forEach((ids, i) => {
+    const color = REPEAT_HIGHLIGHT_COLORS[i % REPEAT_HIGHLIGHT_COLORS.length];
+    for (const id of ids) map.set(id, color);
+  });
+  return map;
+}
 
 function displayRing(ring: string, order: RingFieldOrder): string {
   const { country, year, rest } = parseRingTokens(ring);
@@ -84,12 +105,14 @@ function ChildBoxBody({
   ringFieldOrder,
   accent,
   photoMaxHeight = 110,
+  hasRepeatedAncestors,
 }: {
   child: Bird;
   prose: PedigreeProse;
   ringFieldOrder: RingFieldOrder;
   accent: string;
   photoMaxHeight?: number;
+  hasRepeatedAncestors: boolean;
 }) {
   const sectionHeading: React.CSSProperties = {
     fontWeight: 700,
@@ -120,6 +143,11 @@ function ChildBoxBody({
 
       <div style={sectionHeading}>LINE-BREEDING OF NOTE</div>
       <p style={{ fontSize: '0.85em', marginBottom: 0 }}>{prose.lineBreedingOfNote || <span style={{ color: RED, fontStyle: 'italic' }}>none detected</span>}</p>
+      {hasRepeatedAncestors && (
+        <p style={{ fontSize: '0.75em', color: '#888', fontStyle: 'italic', marginTop: 2, marginBottom: 0 }}>
+          Matching coloured boxes on this sheet mark the same ancestor appearing more than once.
+        </p>
+      )}
 
       <div style={sectionHeading}>SIRE'S OWN RECORD</div>
       <p style={{ fontSize: '0.85em', marginBottom: 0 }}>{prose.sireOwnRecord}</p>
@@ -154,6 +182,7 @@ function Box({
   children,
   highlight,
   accent,
+  fillColor,
   contentVersion,
 }: {
   boxId: string;
@@ -168,6 +197,11 @@ function Box({
   children: React.ReactNode;
   highlight?: boolean;
   accent: string;
+  // Set when this box's bird is a repeated ancestor (line-breeding) —
+  // tints the box so every box for that same physical bird is visibly
+  // the same colour, wherever it recurs in the tree. See
+  // buildRepeatColorMap above.
+  fillColor?: string;
   // A cheap, stable signal that the box's actual content changed (each
   // bird's own `updatedAt`) — see the measurement effect below for why
   // this needs to be a real dependency rather than "just remeasure every
@@ -293,7 +327,7 @@ function Box({
         transformOrigin: 'top left',
         border: `1px solid ${highlight ? accent : '#ccc'}`,
         boxSizing: 'border-box',
-        background: '#fff',
+        background: fillColor ?? '#fff',
         cursor: editMode === 'layout' ? 'move' : undefined,
         // An overflowing box's content spills past its own slot into
         // whatever's below it (see contentRef's overflow:visible above) —
@@ -418,6 +452,7 @@ export default function PedigreeSheet({
   const tmpl = templateById(templateId);
   const geo = geometryFor(tmpl.orientation);
   const boxes = buildBoxes(child, indexById, tmpl.layoutKind, geo);
+  const repeatColorMap = buildRepeatColorMap(tree, child.id);
 
   const headerBg = printVariant === 'black-header' ? INK : '#fff';
   const headerFg = printVariant === 'black-header' ? '#fff' : INK;
@@ -604,10 +639,18 @@ export default function PedigreeSheet({
           onResetBox={onResetBox}
           highlight={box.generation === 0}
           accent={accent}
+          fillColor={box.generation === 0 ? undefined : repeatColorMap.get(box.bird.id)}
           contentVersion={box.generation === 0 ? `${child.updatedAt ?? ''}:${JSON.stringify(prose).length}` : (box.bird.updatedAt ?? box.bird.id)}
         >
           {box.generation === 0 ? (
-            <ChildBoxBody child={child} prose={prose} ringFieldOrder={ringFieldOrder} accent={accent} photoMaxHeight={tmpl.photoMaxHeight} />
+            <ChildBoxBody
+              child={child}
+              prose={prose}
+              ringFieldOrder={ringFieldOrder}
+              accent={accent}
+              photoMaxHeight={tmpl.photoMaxHeight}
+              hasRepeatedAncestors={repeatColorMap.size > 0}
+            />
           ) : (
             <AncestorBoxBody bird={box.bird} ringFieldOrder={ringFieldOrder} />
           )}
