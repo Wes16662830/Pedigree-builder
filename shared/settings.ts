@@ -18,6 +18,8 @@ export function maskApiKey(key: string): string {
 export const LOFT_NAME_SETTING = 'loft_name';
 export const LOFT_SUBTITLE_SETTING = 'loft_subtitle';
 export const LOFT_ADDRESS_SETTING = 'loft_address';
+export const LOFT_PHONE_SETTING = 'loft_phone';
+export const LOFT_EMAIL_SETTING = 'loft_email';
 // A data: URL — small enough (see the 500KB client-side cap) to store as a
 // plain settings row rather than a separate upload/R2 object.
 export const LOFT_LOGO_SETTING = 'loft_logo_data_url';
@@ -26,5 +28,7 @@ export interface LoftSettings {
   name?: string;
   subtitle?: string;
   address?: string;
+  phone?: string;
+  email?: string;
   logoDataUrl?: string;
 }

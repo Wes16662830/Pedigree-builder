@@ -31,6 +31,8 @@ const RED = '#dc2626';
 const DEFAULT_LOFT_NAME = 'OudeLuck Lofts';
 const DEFAULT_LOFT_SUBTITLE = 'OneLoft Genetics';
 const DEFAULT_LOFT_ADDRESS = 'Athlone Farm, Tarkastad, Eastern Cape';
+const DEFAULT_LOFT_PHONE = '083 6979 536';
+const DEFAULT_LOFT_EMAIL = 'oudelucklofts@gmail.com';
 
 // Repeated-ancestor highlight colours — the same convention some source
 // pedigree software already uses (build brief follow-up): every box for
@@ -460,6 +462,8 @@ export default function PedigreeSheet({
   const loftName = loft?.name?.trim() || DEFAULT_LOFT_NAME;
   const loftSubtitle = loft?.subtitle?.trim() || DEFAULT_LOFT_SUBTITLE;
   const loftAddress = loft?.address?.trim() || DEFAULT_LOFT_ADDRESS;
+  const loftPhone = loft?.phone?.trim() || DEFAULT_LOFT_PHONE;
+  const loftEmail = loft?.email?.trim() || DEFAULT_LOFT_EMAIL;
   const loftInitials =
     loftName
       .split(/\s+/)
@@ -587,6 +591,12 @@ export default function PedigreeSheet({
             </div>
             <div style={{ fontSize: 12, color: accent, marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{loftSubtitle}</div>
             <div style={{ fontSize: 10.5, opacity: 0.75, marginTop: 6, lineHeight: 1.4 }}>{loftAddress}</div>
+            {(loftPhone || loftEmail) && (
+              <div style={{ fontSize: 10.5, opacity: 0.75, marginTop: 6, lineHeight: 1.5 }}>
+                {loftPhone && <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{loftPhone}</div>}
+                {loftEmail && <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{loftEmail}</div>}
+              </div>
+            )}
           </div>
 
           <div style={{ flex: 1, minHeight: 12 }} />

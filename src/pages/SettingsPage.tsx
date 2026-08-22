@@ -23,6 +23,8 @@ export default function SettingsPage() {
   const [loftName, setLoftName] = useState('');
   const [loftSubtitle, setLoftSubtitle] = useState('');
   const [loftAddress, setLoftAddress] = useState('');
+  const [loftPhone, setLoftPhone] = useState('');
+  const [loftEmail, setLoftEmail] = useState('');
   const [loftBusy, setLoftBusy] = useState(false);
   const [loftError, setLoftError] = useState<string>();
   const [loftSavedJustNow, setLoftSavedJustNow] = useState(false);
@@ -40,6 +42,8 @@ export default function SettingsPage() {
         setLoftName(s.loft.name ?? '');
         setLoftSubtitle(s.loft.subtitle ?? '');
         setLoftAddress(s.loft.address ?? '');
+        setLoftPhone(s.loft.phone ?? '');
+        setLoftEmail(s.loft.email ?? '');
       })
       .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load settings'));
   }
@@ -79,7 +83,7 @@ export default function SettingsPage() {
     setLoftBusy(true);
     setLoftError(undefined);
     try {
-      const updated = await saveLoftSettings({ loftName, loftSubtitle, loftAddress });
+      const updated = await saveLoftSettings({ loftName, loftSubtitle, loftAddress, loftPhone, loftEmail });
       setInfo(updated);
       setLoftSavedJustNow(true);
       setTimeout(() => setLoftSavedJustNow(false), 3000);
@@ -281,6 +285,26 @@ export default function SettingsPage() {
             placeholder="Athlone Farm, Tarkastad, Eastern Cape"
             value={loftAddress}
             onChange={(e) => setLoftAddress(e.target.value)}
+          />
+        </label>
+        <label className="block">
+          <span className="block text-xs text-neutral-500">Phone</span>
+          <input
+            type="tel"
+            className="w-full rounded border px-2 py-1.5"
+            placeholder="083 6979 536"
+            value={loftPhone}
+            onChange={(e) => setLoftPhone(e.target.value)}
+          />
+        </label>
+        <label className="block">
+          <span className="block text-xs text-neutral-500">Email</span>
+          <input
+            type="email"
+            className="w-full rounded border px-2 py-1.5"
+            placeholder="oudelucklofts@gmail.com"
+            value={loftEmail}
+            onChange={(e) => setLoftEmail(e.target.value)}
           />
         </label>
 

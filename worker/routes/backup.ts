@@ -12,7 +12,14 @@ import {
   getSetting,
   setSetting,
 } from '../db.js';
-import { LOFT_NAME_SETTING, LOFT_SUBTITLE_SETTING, LOFT_ADDRESS_SETTING, LOFT_LOGO_SETTING } from '../../shared/settings.js';
+import {
+  LOFT_NAME_SETTING,
+  LOFT_SUBTITLE_SETTING,
+  LOFT_ADDRESS_SETTING,
+  LOFT_PHONE_SETTING,
+  LOFT_EMAIL_SETTING,
+  LOFT_LOGO_SETTING,
+} from '../../shared/settings.js';
 import { BACKUP_VERSION, type BackupFile } from '../../shared/backup.js';
 import type { Env } from '../env.js';
 
@@ -56,6 +63,8 @@ backupRouter.get('/', async (c) => {
       name: await getSetting(db, LOFT_NAME_SETTING),
       subtitle: await getSetting(db, LOFT_SUBTITLE_SETTING),
       address: await getSetting(db, LOFT_ADDRESS_SETTING),
+      phone: await getSetting(db, LOFT_PHONE_SETTING),
+      email: await getSetting(db, LOFT_EMAIL_SETTING),
       logoDataUrl: await getSetting(db, LOFT_LOGO_SETTING),
     },
   };
@@ -104,6 +113,8 @@ backupRouter.post('/restore', async (c) => {
     if (body.loft?.name !== undefined) await setSetting(db, LOFT_NAME_SETTING, body.loft.name);
     if (body.loft?.subtitle !== undefined) await setSetting(db, LOFT_SUBTITLE_SETTING, body.loft.subtitle);
     if (body.loft?.address !== undefined) await setSetting(db, LOFT_ADDRESS_SETTING, body.loft.address);
+    if (body.loft?.phone !== undefined) await setSetting(db, LOFT_PHONE_SETTING, body.loft.phone);
+    if (body.loft?.email !== undefined) await setSetting(db, LOFT_EMAIL_SETTING, body.loft.email);
     if (body.loft?.logoDataUrl !== undefined) await setSetting(db, LOFT_LOGO_SETTING, body.loft.logoDataUrl);
 
     return c.json({

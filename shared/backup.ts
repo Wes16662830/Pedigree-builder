@@ -45,6 +45,8 @@ export interface BackupLoft {
   name?: string;
   subtitle?: string;
   address?: string;
+  phone?: string;
+  email?: string;
   logoDataUrl?: string;
 }
 

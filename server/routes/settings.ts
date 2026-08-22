@@ -6,6 +6,8 @@ import {
   LOFT_NAME_SETTING,
   LOFT_SUBTITLE_SETTING,
   LOFT_ADDRESS_SETTING,
+  LOFT_PHONE_SETTING,
+  LOFT_EMAIL_SETTING,
   LOFT_LOGO_SETTING,
 } from '../../shared/settings.js';
 import { ANTHROPIC_API_KEY as ENV_API_KEY } from '../env.js';
@@ -30,6 +32,8 @@ function status() {
       name: getSetting(LOFT_NAME_SETTING),
       subtitle: getSetting(LOFT_SUBTITLE_SETTING),
       address: getSetting(LOFT_ADDRESS_SETTING),
+      phone: getSetting(LOFT_PHONE_SETTING),
+      email: getSetting(LOFT_EMAIL_SETTING),
       logoDataUrl: getSetting(LOFT_LOGO_SETTING),
     },
   };
@@ -42,16 +46,27 @@ settingsRouter.get('/', (_req, res) => {
 });
 
 // PUT /api/settings — any of: anthropicApiKey, loftName, loftSubtitle,
-// loftAddress, loftLogoDataUrl. Only the fields present are written.
+// loftAddress, loftPhone, loftEmail, loftLogoDataUrl. Only the fields
+// present are written.
 settingsRouter.put('/', (req, res) => {
   const body = req.body ?? {};
   const key = (body.anthropicApiKey as string | undefined)?.trim();
   const loftName = body.loftName as string | undefined;
   const loftSubtitle = body.loftSubtitle as string | undefined;
   const loftAddress = body.loftAddress as string | undefined;
+  const loftPhone = body.loftPhone as string | undefined;
+  const loftEmail = body.loftEmail as string | undefined;
   const loftLogoDataUrl = body.loftLogoDataUrl as string | undefined;
 
-  if (key === undefined && loftName === undefined && loftSubtitle === undefined && loftAddress === undefined && loftLogoDataUrl === undefined) {
+  if (
+    key === undefined &&
+    loftName === undefined &&
+    loftSubtitle === undefined &&
+    loftAddress === undefined &&
+    loftPhone === undefined &&
+    loftEmail === undefined &&
+    loftLogoDataUrl === undefined
+  ) {
     res.status(400).json({ error: 'No settings provided.' });
     return;
   }
@@ -64,6 +79,8 @@ settingsRouter.put('/', (req, res) => {
   if (loftName !== undefined) setSetting(LOFT_NAME_SETTING, loftName);
   if (loftSubtitle !== undefined) setSetting(LOFT_SUBTITLE_SETTING, loftSubtitle);
   if (loftAddress !== undefined) setSetting(LOFT_ADDRESS_SETTING, loftAddress);
+  if (loftPhone !== undefined) setSetting(LOFT_PHONE_SETTING, loftPhone);
+  if (loftEmail !== undefined) setSetting(LOFT_EMAIL_SETTING, loftEmail);
   if (loftLogoDataUrl !== undefined) setSetting(LOFT_LOGO_SETTING, loftLogoDataUrl);
 
   res.json(status());
