@@ -95,10 +95,7 @@ function AncestorBoxBody({ bird, ringFieldOrder }: { bird: Bird; ringFieldOrder:
       {bird.photoUrl && <img src={bird.photoUrl} alt={bird.ring} style={{ width: '100%', maxHeight: 60, objectFit: 'cover', borderRadius: 3, marginBottom: 4 }} />}
       <div style={{ fontWeight: 700, marginBottom: 1 }}>{displayRing(bird.ring, ringFieldOrder)}</div>
       {bird.name && <div style={{ fontStyle: 'italic', marginBottom: 1 }}>"{bird.name}"</div>}
-      <div style={{ color: '#444' }}>
-        {bird.sex === 'unknown' ? <span style={{ color: RED, fontStyle: 'italic' }}>sex: unknown</span> : bird.sex}
-        {bird.colour ? ` · ${bird.colour}` : ''}
-      </div>
+      {bird.colour && <div style={{ color: '#444' }}>{bird.colour}</div>}
       {bird.breeder && <div style={{ color: '#666' }}>{bird.breeder}</div>}
       {bird.notes.length > 0 && (
         <div style={{ marginTop: 3, borderTop: '1px solid #eee', paddingTop: 2 }}>
@@ -151,10 +148,7 @@ function ChildBoxBody({
       )}
       <div style={{ fontSize: 18, fontWeight: 800 }}>{displayRing(child.ring, ringFieldOrder)}</div>
       {child.name && <div style={{ fontStyle: 'italic', fontSize: 14, marginTop: 1 }}>"{child.name}"</div>}
-      <div style={{ marginTop: 3, color: '#444' }}>
-        {child.sex === 'unknown' ? <span style={{ color: RED, fontStyle: 'italic' }}>sex: unknown</span> : child.sex}
-        {child.colour ? ` · ${child.colour}` : ''}
-      </div>
+      {child.colour && <div style={{ marginTop: 3, color: '#444' }}>{child.colour}</div>}
       {child.breeder && <div style={{ color: '#666' }}>{child.breeder}</div>}
       {child.loftAddress && <div style={{ fontSize: '0.85em', color: '#888' }}>{child.loftAddress}</div>}
 
