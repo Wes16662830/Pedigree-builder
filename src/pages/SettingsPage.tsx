@@ -25,6 +25,7 @@ export default function SettingsPage() {
   const [loftAddress, setLoftAddress] = useState('');
   const [loftPhone, setLoftPhone] = useState('');
   const [loftEmail, setLoftEmail] = useState('');
+  const [loftLogoScale, setLoftLogoScale] = useState(100); // % of each template's own base logo size
   const [loftBusy, setLoftBusy] = useState(false);
   const [loftError, setLoftError] = useState<string>();
   const [loftSavedJustNow, setLoftSavedJustNow] = useState(false);
@@ -44,6 +45,8 @@ export default function SettingsPage() {
         setLoftAddress(s.loft.address ?? '');
         setLoftPhone(s.loft.phone ?? '');
         setLoftEmail(s.loft.email ?? '');
+        const scale = Number(s.loft.logoScale);
+        setLoftLogoScale(Number.isFinite(scale) && scale > 0 ? Math.round(scale * 100) : 100);
       })
       .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load settings'));
   }
@@ -83,7 +86,7 @@ export default function SettingsPage() {
     setLoftBusy(true);
     setLoftError(undefined);
     try {
-      const updated = await saveLoftSettings({ loftName, loftSubtitle, loftAddress, loftPhone, loftEmail });
+      const updated = await saveLoftSettings({ loftName, loftSubtitle, loftAddress, loftPhone, loftEmail, loftLogoScale: (loftLogoScale / 100).toFixed(2) });
       setInfo(updated);
       setLoftSavedJustNow(true);
       setTimeout(() => setLoftSavedJustNow(false), 3000);
@@ -269,6 +272,32 @@ export default function SettingsPage() {
             />
           </div>
         </div>
+
+        <label className="block">
+          <span className="flex items-center justify-between text-xs text-neutral-500">
+            <span>Logo size</span>
+            <span className="font-mono">{loftLogoScale}%</span>
+          </span>
+          <div className="flex items-center gap-2">
+            <input
+              type="range"
+              min={50}
+              max={200}
+              step={5}
+              value={loftLogoScale}
+              onChange={(e) => setLoftLogoScale(Number(e.target.value))}
+              className="w-full"
+            />
+            {loftLogoScale !== 100 && (
+              <button type="button" onClick={() => setLoftLogoScale(100)} className="shrink-0 text-xs text-neutral-400 underline hover:text-neutral-700">
+                Reset
+              </button>
+            )}
+          </div>
+          <span className="mt-1 block text-xs text-neutral-400">
+            Scales the logo (or initials placeholder) in the header of every template — click "Save loft details" below to apply it.
+          </span>
+        </label>
 
         <label className="block">
           <span className="block text-xs text-neutral-500">Loft name</span>

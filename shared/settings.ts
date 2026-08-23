@@ -23,6 +23,10 @@ export const LOFT_EMAIL_SETTING = 'loft_email';
 // A data: URL — small enough (see the 500KB client-side cap) to store as a
 // plain settings row rather than a separate upload/R2 object.
 export const LOFT_LOGO_SETTING = 'loft_logo_data_url';
+// A multiplier on each template's own base logo size (see logoSizeFor in
+// PedigreeSheet.tsx) — stored as text like every other settings row, parsed
+// back to a number on read. "1" (unset) means the original size.
+export const LOFT_LOGO_SCALE_SETTING = 'loft_logo_scale';
 
 export interface LoftSettings {
   name?: string;
@@ -31,4 +35,5 @@ export interface LoftSettings {
   phone?: string;
   email?: string;
   logoDataUrl?: string;
+  logoScale?: string;
 }

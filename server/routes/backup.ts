@@ -19,6 +19,7 @@ import {
   LOFT_PHONE_SETTING,
   LOFT_EMAIL_SETTING,
   LOFT_LOGO_SETTING,
+  LOFT_LOGO_SCALE_SETTING,
 } from '../../shared/settings.js';
 import { BACKUP_VERSION, type BackupFile } from '../../shared/backup.js';
 
@@ -66,6 +67,7 @@ backupRouter.get('/', (_req, res) => {
       phone: getSetting(LOFT_PHONE_SETTING),
       email: getSetting(LOFT_EMAIL_SETTING),
       logoDataUrl: getSetting(LOFT_LOGO_SETTING),
+      logoScale: getSetting(LOFT_LOGO_SCALE_SETTING),
     },
   };
 
@@ -118,6 +120,7 @@ backupRouter.post('/restore', (req, res) => {
     if (body.loft?.phone !== undefined) setSetting(LOFT_PHONE_SETTING, body.loft.phone);
     if (body.loft?.email !== undefined) setSetting(LOFT_EMAIL_SETTING, body.loft.email);
     if (body.loft?.logoDataUrl !== undefined) setSetting(LOFT_LOGO_SETTING, body.loft.logoDataUrl);
+    if (body.loft?.logoScale !== undefined) setSetting(LOFT_LOGO_SCALE_SETTING, body.loft.logoScale);
 
     res.json({
       birds: body.birds.length,

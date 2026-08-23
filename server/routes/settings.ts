@@ -9,6 +9,7 @@ import {
   LOFT_PHONE_SETTING,
   LOFT_EMAIL_SETTING,
   LOFT_LOGO_SETTING,
+  LOFT_LOGO_SCALE_SETTING,
 } from '../../shared/settings.js';
 import { ANTHROPIC_API_KEY as ENV_API_KEY } from '../env.js';
 
@@ -17,6 +18,10 @@ export const settingsRouter = Router();
 // Data URLs are stored as-is in the settings table (TEXT); cap generously
 // server-side too, in case a client ever skips the UI's own size check.
 const MAX_LOGO_BYTES = 1024 * 1024;
+// Matches the Settings page slider (50%-200%) — validated here too in case
+// a client ever sends a raw value outside the slider's own range.
+const MIN_LOGO_SCALE = 0.5;
+const MAX_LOGO_SCALE = 2;
 
 function status() {
   const dbKey = getSetting(ANTHROPIC_API_KEY_SETTING);
@@ -35,6 +40,7 @@ function status() {
       phone: getSetting(LOFT_PHONE_SETTING),
       email: getSetting(LOFT_EMAIL_SETTING),
       logoDataUrl: getSetting(LOFT_LOGO_SETTING),
+      logoScale: getSetting(LOFT_LOGO_SCALE_SETTING),
     },
   };
 }
@@ -46,8 +52,8 @@ settingsRouter.get('/', (_req, res) => {
 });
 
 // PUT /api/settings — any of: anthropicApiKey, loftName, loftSubtitle,
-// loftAddress, loftPhone, loftEmail, loftLogoDataUrl. Only the fields
-// present are written.
+// loftAddress, loftPhone, loftEmail, loftLogoDataUrl, loftLogoScale. Only
+// the fields present are written.
 settingsRouter.put('/', (req, res) => {
   const body = req.body ?? {};
   const key = (body.anthropicApiKey as string | undefined)?.trim();
@@ -57,6 +63,7 @@ settingsRouter.put('/', (req, res) => {
   const loftPhone = body.loftPhone as string | undefined;
   const loftEmail = body.loftEmail as string | undefined;
   const loftLogoDataUrl = body.loftLogoDataUrl as string | undefined;
+  const loftLogoScale = body.loftLogoScale as string | undefined;
 
   if (
     key === undefined &&
@@ -65,7 +72,8 @@ settingsRouter.put('/', (req, res) => {
     loftAddress === undefined &&
     loftPhone === undefined &&
     loftEmail === undefined &&
-    loftLogoDataUrl === undefined
+    loftLogoDataUrl === undefined &&
+    loftLogoScale === undefined
   ) {
     res.status(400).json({ error: 'No settings provided.' });
     return;
@@ -73,6 +81,13 @@ settingsRouter.put('/', (req, res) => {
   if (loftLogoDataUrl !== undefined && loftLogoDataUrl.length > MAX_LOGO_BYTES) {
     res.status(400).json({ error: 'Logo image is too large (1MB max as a data URL).' });
     return;
+  }
+  if (loftLogoScale !== undefined) {
+    const n = Number(loftLogoScale);
+    if (!Number.isFinite(n) || n < MIN_LOGO_SCALE || n > MAX_LOGO_SCALE) {
+      res.status(400).json({ error: `Logo size must be between ${MIN_LOGO_SCALE * 100}% and ${MAX_LOGO_SCALE * 100}%.` });
+      return;
+    }
   }
 
   if (key) setSetting(ANTHROPIC_API_KEY_SETTING, key);
@@ -82,6 +97,7 @@ settingsRouter.put('/', (req, res) => {
   if (loftPhone !== undefined) setSetting(LOFT_PHONE_SETTING, loftPhone);
   if (loftEmail !== undefined) setSetting(LOFT_EMAIL_SETTING, loftEmail);
   if (loftLogoDataUrl !== undefined) setSetting(LOFT_LOGO_SETTING, loftLogoDataUrl);
+  if (loftLogoScale !== undefined) setSetting(LOFT_LOGO_SCALE_SETTING, loftLogoScale);
 
   res.json(status());
 });

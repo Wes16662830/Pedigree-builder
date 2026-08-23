@@ -34,6 +34,26 @@ const DEFAULT_LOFT_ADDRESS = 'Athlone Farm, Tarkastad, Eastern Cape';
 const DEFAULT_LOFT_PHONE = '083 6979 536';
 const DEFAULT_LOFT_EMAIL = 'oudelucklofts@gmail.com';
 
+// Logo sizing (build brief follow-up: "resize the loft logo on the
+// pedigrees"). One Settings-page slider (loft.logoScale, a multiplier —
+// "1" or unset means the original size) drives both header styles, but
+// each has its own base size and its own safe ceiling: the band's logo
+// has to fit inside a fixed HEADER_H (see layout.ts) without pushing the
+// ring number off-canvas, while the sidebar has much more vertical room
+// to work with. Clamping per-style means one slider "just works" for
+// whichever template happens to be selected, instead of a value that's
+// safe on one and clips on the other.
+const LOGO_BASE_BAND = 56;
+const LOGO_MIN_BAND = 28;
+const LOGO_MAX_BAND = 76;
+const LOGO_BASE_SIDEBAR = 72;
+const LOGO_MIN_SIDEBAR = 36;
+const LOGO_MAX_SIDEBAR = 140;
+
+function logoSizeFor(base: number, min: number, max: number, scale: number): number {
+  return Math.round(Math.min(max, Math.max(min, base * scale)));
+}
+
 // Repeated-ancestor highlight colours — the same convention some source
 // pedigree software already uses (build brief follow-up): every box for
 // the same physical ancestor, wherever it recurs in the tree, gets the
@@ -464,6 +484,10 @@ export default function PedigreeSheet({
   const loftAddress = loft?.address?.trim() || DEFAULT_LOFT_ADDRESS;
   const loftPhone = loft?.phone?.trim() || DEFAULT_LOFT_PHONE;
   const loftEmail = loft?.email?.trim() || DEFAULT_LOFT_EMAIL;
+  const parsedLogoScale = Number(loft?.logoScale);
+  const logoScale = Number.isFinite(parsedLogoScale) && parsedLogoScale > 0 ? parsedLogoScale : 1;
+  const bandLogoSize = logoSizeFor(LOGO_BASE_BAND, LOGO_MIN_BAND, LOGO_MAX_BAND, logoScale);
+  const sidebarLogoSize = logoSizeFor(LOGO_BASE_SIDEBAR, LOGO_MIN_SIDEBAR, LOGO_MAX_SIDEBAR, logoScale);
   const loftInitials =
     loftName
       .split(/\s+/)
@@ -553,12 +577,16 @@ export default function PedigreeSheet({
           }}
         >
           {loft?.logoDataUrl ? (
-            <img src={loft.logoDataUrl} alt={loftName} style={{ width: 72, height: 72, borderRadius: logoRadius, objectFit: 'cover', marginBottom: 16, flexShrink: 0 }} />
+            <img
+              src={loft.logoDataUrl}
+              alt={loftName}
+              style={{ width: sidebarLogoSize, height: sidebarLogoSize, borderRadius: logoRadius, objectFit: 'cover', marginBottom: 16, flexShrink: 0 }}
+            />
           ) : (
             <div
               style={{
-                width: 72,
-                height: 72,
+                width: sidebarLogoSize,
+                height: sidebarLogoSize,
                 borderRadius: logoRadius,
                 background: accent,
                 display: 'flex',
@@ -566,7 +594,7 @@ export default function PedigreeSheet({
                 justifyContent: 'center',
                 color: INK,
                 fontWeight: 900,
-                fontSize: 24,
+                fontSize: Math.max(10, Math.round(sidebarLogoSize * 0.33)),
                 marginBottom: 16,
                 flexShrink: 0,
               }}
@@ -637,13 +665,13 @@ export default function PedigreeSheet({
             <img
               src={loft.logoDataUrl}
               alt={loftName}
-              style={{ width: 56, height: 56, borderRadius: logoRadius, objectFit: 'cover', marginRight: 16, flexShrink: 0 }}
+              style={{ width: bandLogoSize, height: bandLogoSize, borderRadius: logoRadius, objectFit: 'cover', marginRight: 16, flexShrink: 0 }}
             />
           ) : (
             <div
               style={{
-                width: 56,
-                height: 56,
+                width: bandLogoSize,
+                height: bandLogoSize,
                 borderRadius: logoRadius,
                 background: accent,
                 display: 'flex',
@@ -651,7 +679,7 @@ export default function PedigreeSheet({
                 justifyContent: 'center',
                 color: INK,
                 fontWeight: 900,
-                fontSize: 20,
+                fontSize: Math.max(10, Math.round(bandLogoSize * 0.36)),
                 marginRight: 16,
                 flexShrink: 0,
               }}

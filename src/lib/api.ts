@@ -228,6 +228,7 @@ export interface LoftSettings {
   phone?: string;
   email?: string;
   logoDataUrl?: string;
+  logoScale?: string;
 }
 
 export interface SettingsInfo {
@@ -248,6 +249,7 @@ export function saveLoftSettings(patch: {
   loftPhone?: string;
   loftEmail?: string;
   loftLogoDataUrl?: string;
+  loftLogoScale?: string;
 }): Promise<SettingsInfo> {
   return api('/settings', { method: 'PUT', body: JSON.stringify(patch) });
 }

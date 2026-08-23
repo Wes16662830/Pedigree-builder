@@ -19,6 +19,7 @@ import {
   LOFT_PHONE_SETTING,
   LOFT_EMAIL_SETTING,
   LOFT_LOGO_SETTING,
+  LOFT_LOGO_SCALE_SETTING,
 } from '../../shared/settings.js';
 import { BACKUP_VERSION, type BackupFile } from '../../shared/backup.js';
 import type { Env } from '../env.js';
@@ -66,6 +67,7 @@ backupRouter.get('/', async (c) => {
       phone: await getSetting(db, LOFT_PHONE_SETTING),
       email: await getSetting(db, LOFT_EMAIL_SETTING),
       logoDataUrl: await getSetting(db, LOFT_LOGO_SETTING),
+      logoScale: await getSetting(db, LOFT_LOGO_SCALE_SETTING),
     },
   };
 
@@ -116,6 +118,7 @@ backupRouter.post('/restore', async (c) => {
     if (body.loft?.phone !== undefined) await setSetting(db, LOFT_PHONE_SETTING, body.loft.phone);
     if (body.loft?.email !== undefined) await setSetting(db, LOFT_EMAIL_SETTING, body.loft.email);
     if (body.loft?.logoDataUrl !== undefined) await setSetting(db, LOFT_LOGO_SETTING, body.loft.logoDataUrl);
+    if (body.loft?.logoScale !== undefined) await setSetting(db, LOFT_LOGO_SCALE_SETTING, body.loft.logoScale);
 
     return c.json({
       birds: body.birds.length,

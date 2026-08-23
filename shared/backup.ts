@@ -48,6 +48,7 @@ export interface BackupLoft {
   phone?: string;
   email?: string;
   logoDataUrl?: string;
+  logoScale?: string;
 }
 
 export const BACKUP_VERSION = 1;
