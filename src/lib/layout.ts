@@ -206,3 +206,17 @@ export type LayoutState = Record<string, Partial<BoxOverride>>;
 export function overrideFor(layout: LayoutState, id: string): BoxOverride {
   return { ...DEFAULT_OVERRIDE, ...layout[id] };
 }
+
+// Sheet-wide text size (build brief follow-up: "edit the general text
+// size"), stored as a pseudo-box entry in the same LayoutState blob rather
+// than a separate DB column — `boxes.map(...)` in PedigreeSheet only ever
+// iterates the real generated boxes, so this key rides along in the same
+// layout JSON (get saved/reset/restored with it) without either side
+// needing to know about it specifically. Reuses BoxOverride's fontScale
+// field since the meaning ("multiply the text") is identical, just scoped
+// to the whole sheet instead of one box.
+export const SHEET_SCALE_KEY = '__sheet__';
+
+export function sheetFontScale(layout: LayoutState): number {
+  return layout[SHEET_SCALE_KEY]?.fontScale ?? 1;
+}

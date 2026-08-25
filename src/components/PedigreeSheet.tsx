@@ -5,7 +5,7 @@ import type { RingFieldOrder } from '../../shared/ring';
 import { formatRing, parseRingTokens } from '../../shared/ring';
 import type { LoftSettings } from '../lib/api';
 import { templateById } from '../lib/templates';
-import { buildBoxes, geometryFor, overrideFor, type LayoutState } from '../lib/layout';
+import { buildBoxes, geometryFor, overrideFor, sheetFontScale, type LayoutState } from '../lib/layout';
 import { repeatedAncestorGroups } from '../../shared/crossref';
 
 export type EditMode = 'view' | 'text' | 'layout';
@@ -94,9 +94,9 @@ function AncestorBoxBody({ bird, ringFieldOrder }: { bird: Bird; ringFieldOrder:
     <div style={{ lineHeight: 1.35 }}>
       {bird.photoUrl && <img src={bird.photoUrl} alt={bird.ring} style={{ width: '100%', maxHeight: 60, objectFit: 'cover', borderRadius: 3, marginBottom: 4 }} />}
       <div style={{ fontWeight: 700, marginBottom: 1 }}>{displayRing(bird.ring, ringFieldOrder)}</div>
-      {bird.name && <div style={{ fontStyle: 'italic', marginBottom: 1 }}>"{bird.name}"</div>}
-      {bird.colour && <div style={{ color: '#444' }}>{bird.colour}</div>}
-      {bird.breeder && <div style={{ color: '#666' }}>{bird.breeder}</div>}
+      {bird.name && <div style={{ fontSize: '0.85em', fontStyle: 'italic', marginBottom: 1 }}>"{bird.name}"</div>}
+      {bird.colour && <div style={{ fontSize: '0.85em', color: '#444' }}>{bird.colour}</div>}
+      {bird.breeder && <div style={{ fontSize: '0.85em', color: '#666' }}>{bird.breeder}</div>}
       {bird.notes.length > 0 && (
         <div style={{ marginTop: 3, borderTop: '1px solid #eee', paddingTop: 2 }}>
           {bird.notes.map((n, i) => (
@@ -125,6 +125,7 @@ function ChildBoxBody({
   accent,
   photoMaxHeight = 110,
   hasRepeatedAncestors,
+  textScale,
 }: {
   child: Bird;
   prose: PedigreeProse;
@@ -132,6 +133,14 @@ function ChildBoxBody({
   accent: string;
   photoMaxHeight?: number;
   hasRepeatedAncestors: boolean;
+  // The ring and name below are set in absolute px, not em, so they read
+  // as prominently on a spacious child card as a cramped one — unlike the
+  // rest of the body, which is all em/inherit and so already follows the
+  // container's own font-size (see Box's contentRef below). That means
+  // the sheet-wide text-size control (sheetFontScale) has to be applied
+  // to them explicitly here, or it would visibly do nothing to the sheet's
+  // two most prominent lines.
+  textScale: number;
 }) {
   const sectionHeading: React.CSSProperties = {
     fontWeight: 700,
@@ -146,10 +155,10 @@ function ChildBoxBody({
       {child.photoUrl && (
         <img src={child.photoUrl} alt={child.ring} style={{ width: '100%', maxHeight: photoMaxHeight, objectFit: 'cover', borderRadius: 4, marginBottom: 8 }} />
       )}
-      <div style={{ fontSize: 18, fontWeight: 800 }}>{displayRing(child.ring, ringFieldOrder)}</div>
-      {child.name && <div style={{ fontStyle: 'italic', fontSize: 14, marginTop: 1 }}>"{child.name}"</div>}
-      {child.colour && <div style={{ marginTop: 3, color: '#444' }}>{child.colour}</div>}
-      {child.breeder && <div style={{ color: '#666' }}>{child.breeder}</div>}
+      <div style={{ fontSize: 18 * textScale, fontWeight: 800 }}>{displayRing(child.ring, ringFieldOrder)}</div>
+      {child.name && <div style={{ fontStyle: 'italic', fontSize: 12 * textScale, marginTop: 1 }}>"{child.name}"</div>}
+      {child.colour && <div style={{ fontSize: '0.85em', marginTop: 3, color: '#444' }}>{child.colour}</div>}
+      {child.breeder && <div style={{ fontSize: '0.85em', color: '#666' }}>{child.breeder}</div>}
       {child.loftAddress && <div style={{ fontSize: '0.85em', color: '#888' }}>{child.loftAddress}</div>}
 
       <hr style={{ margin: '10px 0 0', borderColor: '#ddd' }} />
@@ -200,6 +209,7 @@ function Box({
   accent,
   fillColor,
   contentVersion,
+  sheetScale,
 }: {
   boxId: string;
   x: number;
@@ -223,6 +233,11 @@ function Box({
   // this needs to be a real dependency rather than "just remeasure every
   // render".
   contentVersion: string;
+  // Sheet-wide text-size multiplier (build brief follow-up: "edit the
+  // general text size"), layered on top of the per-box A-/A+ override
+  // below rather than replacing it — one control for "the whole sheet
+  // reads a bit small/large", the other for "this one box specifically".
+  sheetScale: number;
 }) {
   const ov = overrideFor(layout, boxId);
   const dragRef = useRef<{ startX: number; startY: number; ox: number; oy: number } | null>(null);
@@ -317,16 +332,26 @@ function Box({
   useLayoutEffect(() => {
     const el = contentRef.current;
     if (!el) return;
+    // Absolute px, not a CSS percentage: font-size percentages resolve
+    // relative to the *parent's* computed font-size, which nothing here
+    // sets — so `el.style.fontSize = '100%'` silently detached this from
+    // baseFont/ov.fontScale/sheetScale entirely (always landing on the
+    // ambient inherited size instead of ours) once this effect's very
+    // first run overwrote the value the style prop below had just set.
+    // Recomputing from basePx keeps every step a pure function of our own
+    // actual inputs, so a box's text really does track its height and the
+    // sheet-wide text-size control, not just "shrinks on overflow".
+    const basePx = baseFont * ov.fontScale * sheetScale;
     let stepIndex = 0;
-    el.style.fontSize = '100%';
+    el.style.fontSize = `${basePx}px`;
     while (el.scrollHeight > el.clientHeight + 1 && stepIndex < SHRINK_STEPS.length - 1) {
       stepIndex += 1;
-      el.style.fontSize = `${SHRINK_STEPS[stepIndex] * 100}%`;
+      el.style.fontSize = `${basePx * SHRINK_STEPS[stepIndex]}px`;
     }
     const nowOverflowing = el.scrollHeight > el.clientHeight + 1;
     setOverflowing((prev) => (prev === nowOverflowing ? prev : nowOverflowing));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [w, h, ov.fontScale, editMode, contentVersion]);
+  }, [w, h, ov.fontScale, sheetScale, editMode, contentVersion]);
 
   return (
     <div
@@ -365,7 +390,7 @@ function Box({
           paddingTop: editMode === 'layout' ? 22 : 6,
           boxSizing: 'border-box',
           overflow: overflowing ? 'visible' : 'hidden',
-          fontSize: `${baseFont * ov.fontScale}px`,
+          fontSize: `${baseFont * ov.fontScale * sheetScale}px`,
           outline: editMode === 'layout' ? '1px dashed #cbd5e1' : undefined,
           outlineOffset: editMode === 'layout' ? -1 : undefined,
         }}
@@ -469,6 +494,7 @@ export default function PedigreeSheet({
   const geo = geometryFor(tmpl.orientation, tmpl.headerStyle);
   const boxes = buildBoxes(child, indexById, tmpl.layoutKind, geo);
   const repeatColorMap = buildRepeatColorMap(tree, child.id);
+  const sheetScale = sheetFontScale(layout);
 
   const headerBg = printVariant === 'black-header' ? INK : '#fff';
   const headerFg = printVariant === 'black-header' ? '#fff' : INK;
@@ -750,6 +776,7 @@ export default function PedigreeSheet({
           accent={accent}
           fillColor={box.generation === 0 ? undefined : repeatColorMap.get(box.bird.id)}
           contentVersion={box.generation === 0 ? `${child.updatedAt ?? ''}:${JSON.stringify(prose).length}` : (box.bird.updatedAt ?? box.bird.id)}
+          sheetScale={sheetScale}
         >
           {box.generation === 0 ? (
             <ChildBoxBody
@@ -759,6 +786,7 @@ export default function PedigreeSheet({
               accent={accent}
               photoMaxHeight={tmpl.photoMaxHeight}
               hasRepeatedAncestors={repeatColorMap.size > 0}
+              textScale={sheetScale}
             />
           ) : (
             <AncestorBoxBody bird={box.bird} ringFieldOrder={ringFieldOrder} />

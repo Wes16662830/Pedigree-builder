@@ -4,7 +4,7 @@ import BirdEditor from '../components/BirdEditor';
 import { getChildPedigree, getSettings, patchPedigree, updateBird, exportPedigreeHtml, type LoftSettings } from '../lib/api';
 import type { Bird, PedigreeProse } from '../../shared/types';
 import type { RingFieldOrder } from '../../shared/ring';
-import type { LayoutState } from '../lib/layout';
+import { SHEET_SCALE_KEY, sheetFontScale, type LayoutState } from '../lib/layout';
 import { buildExportHtml, downloadHtml } from '../lib/exportHtml';
 import { TEMPLATES, DEFAULT_TEMPLATE_ID, templateById } from '../lib/templates';
 import { setPrintPageSize } from '../lib/printPageSize';
@@ -236,6 +236,29 @@ export default function SheetPage({ childPedigreeId, onBack }: Props) {
               <option value="ring-year">ring, then year</option>
               <option value="year-ring">year, then ring</option>
             </select>
+          </label>
+
+          <label className="flex items-center gap-1.5" title="Scales all text on the sheet at once — on top of any per-box A-/A+ adjustments">
+            <span className="text-neutral-500">Text size</span>
+            <input
+              type="range"
+              min={70}
+              max={150}
+              step={5}
+              value={Math.round(sheetFontScale(layout) * 100)}
+              onChange={(e) => onLayoutChange(SHEET_SCALE_KEY, { fontScale: Number(e.target.value) / 100 })}
+              className="w-28"
+            />
+            <span className="w-9 font-mono text-xs text-neutral-500">{Math.round(sheetFontScale(layout) * 100)}%</span>
+            {sheetFontScale(layout) !== 1 && (
+              <button
+                type="button"
+                onClick={() => onLayoutChange(SHEET_SCALE_KEY, { fontScale: 1 })}
+                className="text-xs text-neutral-400 underline hover:text-neutral-700"
+              >
+                Reset
+              </button>
+            )}
           </label>
         </div>
       </div>
