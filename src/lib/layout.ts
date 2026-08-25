@@ -196,7 +196,13 @@ export interface BoxOverride {
   dy: number;
   scale: number; // corner-grip resize
   fontScale: number; // A-/A+
-  text?: string; // contenteditable override, plain text with \n line breaks
+  // Raw HTML snapshot of this box's contentEditable content, captured from
+  // the live DOM on Save while in Text edit mode (see saveLayout in
+  // SheetPage.tsx) — not plain text, so the ring's bold weight, italic
+  // name, etc. survive an edit. Once set, this box renders the snapshot
+  // verbatim instead of recomputing from the bird/prose data, same
+  // override-wins-until-reset rule as dx/dy/scale/fontScale.
+  text?: string;
 }
 
 export const DEFAULT_OVERRIDE: BoxOverride = { dx: 0, dy: 0, scale: 1, fontScale: 1 };

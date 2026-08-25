@@ -293,7 +293,7 @@ function Box({
     e.preventDefault();
   }
 
-  const isOverridden = ov.dx !== 0 || ov.dy !== 0 || ov.scale !== 1 || ov.fontScale !== 1;
+  const isOverridden = ov.dx !== 0 || ov.dy !== 0 || ov.scale !== 1 || ov.fontScale !== 1 || ov.text !== undefined;
 
   // Base text size scales gently with the box's own height — a spacious
   // box (the child card, a generation-1 ancestor) reads more comfortably
@@ -353,6 +353,18 @@ function Box({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [w, h, ov.fontScale, sheetScale, editMode, contentVersion]);
 
+  const contentStyle: React.CSSProperties = {
+    position: 'absolute',
+    inset: 0,
+    padding: 6,
+    paddingTop: editMode === 'layout' ? 22 : 6,
+    boxSizing: 'border-box',
+    overflow: overflowing ? 'visible' : 'hidden',
+    fontSize: `${baseFont * ov.fontScale * sheetScale}px`,
+    outline: editMode === 'layout' ? '1px dashed #cbd5e1' : undefined,
+    outlineOffset: editMode === 'layout' ? -1 : undefined,
+  };
+
   return (
     <div
       data-box-id={boxId}
@@ -381,22 +393,25 @@ function Box({
       onMouseDown={startDrag}
       className="pedigree-box"
     >
-      <div
-        ref={contentRef}
-        style={{
-          position: 'absolute',
-          inset: 0,
-          padding: 6,
-          paddingTop: editMode === 'layout' ? 22 : 6,
-          boxSizing: 'border-box',
-          overflow: overflowing ? 'visible' : 'hidden',
-          fontSize: `${baseFont * ov.fontScale * sheetScale}px`,
-          outline: editMode === 'layout' ? '1px dashed #cbd5e1' : undefined,
-          outlineOffset: editMode === 'layout' ? -1 : undefined,
-        }}
-      >
-        {children}
-      </div>
+      {/* data-box-content is how SheetPage's saveLayout() finds this box's
+          editable content in the live DOM to capture on Save — see the
+          text override below. ov.text (once set) takes over rendering
+          entirely via dangerouslySetInnerHTML instead of `children`; React
+          won't allow passing both, hence the branch rather than a
+          conditional prop. */}
+      {ov.text !== undefined ? (
+        <div
+          ref={contentRef}
+          data-box-content
+          style={contentStyle}
+          // eslint-disable-next-line react/no-danger
+          dangerouslySetInnerHTML={{ __html: ov.text }}
+        />
+      ) : (
+        <div ref={contentRef} data-box-content style={contentStyle}>
+          {children}
+        </div>
+      )}
 
       {overflowing && (
         <div
@@ -580,6 +595,12 @@ export default function PedigreeSheet({
            is pinned to the bottom of a flex column rather than squeezed
            by long free-text name/address above it. */
         <div
+          // Loft branding has its own edit path (Settings → Loft branding);
+          // typing here directly would look like it works but silently not
+          // save (Text mode's capture-on-save is per-box only — see
+          // saveLayout in SheetPage.tsx), so carve this out as a
+          // non-editable island rather than leave that trap in place.
+          contentEditable={false}
           style={{
             position: 'absolute',
             left: 0,
@@ -662,6 +683,9 @@ export default function PedigreeSheet({
            which is load-bearing (it's what identifies which bird this sheet
            is for) and is never allowed to be pushed off-canvas. */
         <div
+          // See the sidebar branch's matching comment above — loft
+          // branding edits belong in Settings, not typed directly here.
+          contentEditable={false}
           style={{
             position: 'absolute',
             left: 0,

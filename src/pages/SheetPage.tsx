@@ -105,11 +105,35 @@ export default function SheetPage({ childPedigreeId, onBack }: Props) {
     setLayout({});
   }
 
+  // Text mode (contentEditable across the whole sheet — see PedigreeSheet's
+  // suppressContentEditableWarning div) has no per-keystroke React state to
+  // read from: the browser owns those DOM edits directly. Rather than fight
+  // React+contentEditable's well-known caret-jump problem by reconciling on
+  // every input event, capture happens once, here, by reading the live DOM
+  // straight off sheetRef right before it's sent — so Save always persists
+  // exactly what's on screen, regardless of how the user got there. Scoped
+  // to Text mode specifically so a Layout-mode save (dragging a box, the
+  // text-size slider) never spuriously freezes every box's content.
+  function captureTextEdits(base: LayoutState): LayoutState {
+    const sheetEl = sheetRef.current;
+    if (!sheetEl || editMode !== 'text') return base;
+    const next = { ...base };
+    sheetEl.querySelectorAll<HTMLElement>('[data-box-id]').forEach((boxEl) => {
+      const boxId = boxEl.getAttribute('data-box-id');
+      const contentEl = boxEl.querySelector<HTMLElement>('[data-box-content]');
+      if (!boxId || !contentEl) return;
+      next[boxId] = { ...next[boxId], text: contentEl.innerHTML };
+    });
+    return next;
+  }
+
   async function saveLayout() {
     setSaving(true);
     setError(undefined);
     try {
-      await patchPedigree(childPedigreeId, { layout, ringFieldOrder, printVariant, template: templateId });
+      const withTextEdits = captureTextEdits(layout);
+      setLayout(withTextEdits);
+      await patchPedigree(childPedigreeId, { layout: withTextEdits, ringFieldOrder, printVariant, template: templateId });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Save failed');
     } finally {
