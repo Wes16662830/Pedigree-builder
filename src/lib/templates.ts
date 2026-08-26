@@ -19,6 +19,18 @@ export interface SheetTemplate {
   photoMaxHeight?: number; // child photo cap in px; default 110
   paperTint?: string; // subtle page background; default white
   headerStyle?: HeaderStyle; // 'band' (default) across the top, or 'sidebar' down the left edge
+  // Flips the body palette (secondary text tones, box background/border,
+  // the "unconfirmed" warning colour) from light-page-dark-text to
+  // dark-page-light-text — see paletteFor in PedigreeSheet.tsx. Only worth
+  // setting alongside a dark paperTint; every other template assumes a
+  // light page, same as before this existed.
+  dark?: boolean;
+  // Draws a gold/accent "elbow" line from each box to its own sire/dam
+  // box, tracing the family tree explicitly rather than relying on
+  // generation-column position alone to imply the relationship. 'tree'
+  // layout only (built-in reference sample request: a real loft's dark,
+  // gold-accented pedigree with explicit connector lines).
+  connectorLines?: boolean;
 }
 
 export const TEMPLATES: SheetTemplate[] = [
@@ -99,6 +111,20 @@ export const TEMPLATES: SheetTemplate[] = [
     layoutKind: 'tree',
     orientation: 'landscape',
     headerStyle: 'sidebar',
+  },
+  {
+    id: 'onyx-gold',
+    label: 'Onyx & Gold',
+    description:
+      'A dark charcoal canvas throughout with gold-line ancestry — every box connects to its own sire and dam with an explicit elbow line, rather than relying on column position alone. Modeled on a real loft’s own dark pedigree design.',
+    accent: '#C9A227',
+    ink: '#F2F2ED',
+    layoutKind: 'tree',
+    orientation: 'landscape',
+    headerStyle: 'sidebar',
+    paperTint: '#3A3A3C',
+    dark: true,
+    connectorLines: true,
   },
 ];
 

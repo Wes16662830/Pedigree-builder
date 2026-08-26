@@ -5,7 +5,7 @@ import type { RingFieldOrder } from '../../shared/ring';
 import { formatRing, parseRingTokens } from '../../shared/ring';
 import type { LoftSettings } from '../lib/api';
 import { templateById } from '../lib/templates';
-import { buildBoxes, geometryFor, overrideFor, sheetFontScale, type LayoutState } from '../lib/layout';
+import { buildBoxes, geometryFor, overrideFor, sheetFontScale, type LayoutState, type PedigreeBox } from '../lib/layout';
 import { repeatedAncestorGroups } from '../../shared/crossref';
 
 export type EditMode = 'view' | 'text' | 'layout';
@@ -80,37 +80,114 @@ function displayRing(ring: string, order: RingFieldOrder): string {
   return formatRing(country, year, rest, { fieldOrder: order });
 }
 
-function ResultLine({ raw, missing }: { raw: string; missing: boolean }) {
+// Box-body colour tokens, swapped as a set rather than sprinkling
+// `tmpl.dark ? x : y` through every line — every existing template assumes
+// a light page (dark ink on white cards), which LIGHT_PALETTE preserves
+// exactly (same literal values as before this existed). DARK_PALETTE is
+// for a template whose paperTint is itself dark (build brief follow-up:
+// a real loft's own dark, gold-accented pedigree design) — secondary text
+// tones invert to light-on-dark, card backgrounds lift slightly off the
+// page instead of going to pure white, and the "unconfirmed data" warning
+// colour moves to a lighter red with enough contrast on a dark card.
+interface BoxPalette {
+  ink: string; // primary text — the sheet root's own colour
+  sub: string; // colour / breeder-tier secondary text
+  subtle: string; // one step dimmer than sub
+  faint: string; // translations, footnotes — the dimmest tier
+  border: string; // hairline rules within a box body
+  cardBg: string; // box background
+  boxBorder: string; // box outer border when not highlighted
+  warn: string; // "unconfirmed"/missing-data red
+  boxRadius: number;
+}
+
+const LIGHT_PALETTE: BoxPalette = {
+  ink: INK,
+  sub: '#444',
+  subtle: '#666',
+  faint: '#888',
+  border: '#eee',
+  cardBg: '#fff',
+  boxBorder: '#ccc',
+  warn: RED,
+  boxRadius: 0,
+};
+
+const DARK_PALETTE: BoxPalette = {
+  ink: '#F2F2ED',
+  sub: '#D6D6D1',
+  subtle: '#B7B7B2',
+  faint: '#96968F',
+  border: '#5C5C59',
+  cardBg: '#48484A',
+  boxBorder: '#5C5C5E',
+  warn: '#F87171',
+  boxRadius: 8,
+};
+
+function paletteFor(dark: boolean): BoxPalette {
+  return dark ? DARK_PALETTE : LIGHT_PALETTE;
+}
+
+// "Onyx & Gold" build brief follow-up: an explicit gold "elbow" line from
+// each box to its own sire/dam box, rather than relying on generation-
+// column position alone to imply the family tree (as every other 'tree'
+// template does). Purely geometric — every box already knows its own
+// x/y/w/h and which bird it is, so a parent box is just "the box whose
+// bird.id equals this box's bird.sireId/damId"; no changes to the layout
+// engine itself. One path per relationship: horizontal from the child
+// box's right edge, vertical to the parent's row, horizontal into the
+// parent box — the classic family-tree bracket connector.
+function buildConnectorPaths(boxes: PedigreeBox[]): string[] {
+  const byBirdId = new Map(boxes.map((b) => [b.bird.id, b]));
+  const paths: string[] = [];
+  for (const box of boxes) {
+    for (const parentId of [box.bird.sireId, box.bird.damId]) {
+      if (!parentId) continue;
+      const parentBox = byBirdId.get(parentId);
+      if (!parentBox) continue;
+      const x1 = box.x + box.w;
+      const y1 = box.y + box.h / 2;
+      const x2 = parentBox.x;
+      const y2 = parentBox.y + parentBox.h / 2;
+      const midX = x1 + (x2 - x1) / 2;
+      paths.push(`M ${x1} ${y1} H ${midX} V ${y2} H ${x2}`);
+    }
+  }
+  return paths;
+}
+
+function ResultLine({ raw, missing, warn }: { raw: string; missing: boolean; warn: string }) {
   return (
     <div style={{ fontSize: 'inherit', lineHeight: 1.3 }}>
-      {raw || <span style={{ color: RED, fontStyle: 'italic' }}>[result not recorded — unconfirmed]</span>}
-      {missing && !raw.includes('[') && <span style={{ color: RED, fontStyle: 'italic' }}> — unrecorded</span>}
+      {raw || <span style={{ color: warn, fontStyle: 'italic' }}>[result not recorded — unconfirmed]</span>}
+      {missing && !raw.includes('[') && <span style={{ color: warn, fontStyle: 'italic' }}> — unrecorded</span>}
     </div>
   );
 }
 
-function AncestorBoxBody({ bird, ringFieldOrder }: { bird: Bird; ringFieldOrder: RingFieldOrder }) {
+function AncestorBoxBody({ bird, ringFieldOrder, palette }: { bird: Bird; ringFieldOrder: RingFieldOrder; palette: BoxPalette }) {
   return (
     <div style={{ lineHeight: 1.35 }}>
       {bird.photoUrl && <img src={bird.photoUrl} alt={bird.ring} style={{ width: '100%', maxHeight: 60, objectFit: 'cover', borderRadius: 3, marginBottom: 4 }} />}
       <div style={{ fontWeight: 700, marginBottom: 1 }}>{displayRing(bird.ring, ringFieldOrder)}</div>
       {bird.name && <div style={{ fontSize: '0.85em', fontStyle: 'italic', marginBottom: 1 }}>"{bird.name}"</div>}
-      {bird.colour && <div style={{ fontSize: '0.85em', color: '#444' }}>{bird.colour}</div>}
-      {bird.breeder && <div style={{ fontSize: '0.85em', color: '#666' }}>{bird.breeder}</div>}
+      {bird.colour && <div style={{ fontSize: '0.85em', color: palette.sub }}>{bird.colour}</div>}
+      {bird.breeder && <div style={{ fontSize: '0.85em', color: palette.subtle }}>{bird.breeder}</div>}
       {bird.notes.length > 0 && (
-        <div style={{ marginTop: 3, borderTop: '1px solid #eee', paddingTop: 2 }}>
+        <div style={{ marginTop: 3, borderTop: `1px solid ${palette.border}`, paddingTop: 2 }}>
           {bird.notes.map((n, i) => (
-            <div key={i} style={{ fontSize: '0.85em', color: '#555', marginTop: i > 0 ? 2 : 0 }}>
+            <div key={i} style={{ fontSize: '0.85em', color: palette.sub, marginTop: i > 0 ? 2 : 0 }}>
               {n}
-              {bird.notesEn?.[i] && <div style={{ fontStyle: 'italic', color: '#888' }}>({bird.notesEn[i]})</div>}
+              {bird.notesEn?.[i] && <div style={{ fontStyle: 'italic', color: palette.faint }}>({bird.notesEn[i]})</div>}
             </div>
           ))}
         </div>
       )}
       {bird.results.length > 0 && (
-        <div style={{ marginTop: 3, borderTop: '1px solid #eee', paddingTop: 2 }}>
+        <div style={{ marginTop: 3, borderTop: `1px solid ${palette.border}`, paddingTop: 2 }}>
           {bird.results.map((r, i) => (
-            <ResultLine key={i} raw={r.raw} missing={r.position === undefined && r.poolSize === undefined} />
+            <ResultLine key={i} raw={r.raw} missing={r.position === undefined && r.poolSize === undefined} warn={palette.warn} />
           ))}
         </div>
       )}
@@ -126,6 +203,7 @@ function ChildBoxBody({
   photoMaxHeight = 110,
   hasRepeatedAncestors,
   textScale,
+  palette,
 }: {
   child: Bird;
   prose: PedigreeProse;
@@ -141,6 +219,7 @@ function ChildBoxBody({
   // to them explicitly here, or it would visibly do nothing to the sheet's
   // two most prominent lines.
   textScale: number;
+  palette: BoxPalette;
 }) {
   const sectionHeading: React.CSSProperties = {
     fontWeight: 700,
@@ -157,19 +236,21 @@ function ChildBoxBody({
       )}
       <div style={{ fontSize: 18 * textScale, fontWeight: 800 }}>{displayRing(child.ring, ringFieldOrder)}</div>
       {child.name && <div style={{ fontStyle: 'italic', fontSize: 12 * textScale, marginTop: 1 }}>"{child.name}"</div>}
-      {child.colour && <div style={{ fontSize: '0.85em', marginTop: 3, color: '#444' }}>{child.colour}</div>}
-      {child.breeder && <div style={{ fontSize: '0.85em', color: '#666' }}>{child.breeder}</div>}
-      {child.loftAddress && <div style={{ fontSize: '0.85em', color: '#888' }}>{child.loftAddress}</div>}
+      {child.colour && <div style={{ fontSize: '0.85em', marginTop: 3, color: palette.sub }}>{child.colour}</div>}
+      {child.breeder && <div style={{ fontSize: '0.85em', color: palette.subtle }}>{child.breeder}</div>}
+      {child.loftAddress && <div style={{ fontSize: '0.85em', color: palette.faint }}>{child.loftAddress}</div>}
 
-      <hr style={{ margin: '10px 0 0', borderColor: '#ddd' }} />
+      <hr style={{ margin: '10px 0 0', borderColor: palette.border }} />
 
       <div style={{ ...sectionHeading, marginTop: 8 }}>BREEDING</div>
       <p style={{ fontSize: '0.85em', marginBottom: 0 }}>{prose.breeding}</p>
 
       <div style={sectionHeading}>LINE-BREEDING OF NOTE</div>
-      <p style={{ fontSize: '0.85em', marginBottom: 0 }}>{prose.lineBreedingOfNote || <span style={{ color: RED, fontStyle: 'italic' }}>none detected</span>}</p>
+      <p style={{ fontSize: '0.85em', marginBottom: 0 }}>
+        {prose.lineBreedingOfNote || <span style={{ color: palette.warn, fontStyle: 'italic' }}>none detected</span>}
+      </p>
       {hasRepeatedAncestors && (
-        <p style={{ fontSize: '0.75em', color: '#888', fontStyle: 'italic', marginTop: 2, marginBottom: 0 }}>
+        <p style={{ fontSize: '0.75em', color: palette.faint, fontStyle: 'italic', marginTop: 2, marginBottom: 0 }}>
           Matching coloured boxes on this sheet mark the same ancestor appearing more than once.
         </p>
       )}
@@ -210,6 +291,7 @@ function Box({
   fillColor,
   contentVersion,
   sheetScale,
+  palette,
 }: {
   boxId: string;
   x: number;
@@ -238,6 +320,7 @@ function Box({
   // below rather than replacing it — one control for "the whole sheet
   // reads a bit small/large", the other for "this one box specifically".
   sheetScale: number;
+  palette: BoxPalette;
 }) {
   const ov = overrideFor(layout, boxId);
   const dragRef = useRef<{ startX: number; startY: number; ox: number; oy: number } | null>(null);
@@ -378,9 +461,10 @@ function Box({
         height: h,
         transform: `translate(${ov.dx}px, ${ov.dy}px) scale(${ov.scale})`,
         transformOrigin: 'top left',
-        border: `1px solid ${highlight ? accent : '#ccc'}`,
+        border: `1px solid ${highlight ? accent : palette.boxBorder}`,
+        borderRadius: palette.boxRadius,
         boxSizing: 'border-box',
-        background: fillColor ?? '#fff',
+        background: fillColor ?? palette.cardBg,
         cursor: editMode === 'layout' ? 'move' : undefined,
         // An overflowing box's content spills past its own slot into
         // whatever's below it (see contentRef's overflow:visible above) —
@@ -510,6 +594,8 @@ export default function PedigreeSheet({
   const boxes = buildBoxes(child, indexById, tmpl.layoutKind, geo);
   const repeatColorMap = buildRepeatColorMap(tree, child.id);
   const sheetScale = sheetFontScale(layout);
+  const palette = paletteFor(!!tmpl.dark);
+  const connectorPaths = tmpl.connectorLines && tmpl.layoutKind === 'tree' ? buildConnectorPaths(boxes) : [];
 
   const headerBg = printVariant === 'black-header' ? INK : '#fff';
   const headerFg = printVariant === 'black-header' ? '#fff' : INK;
@@ -569,7 +655,7 @@ export default function PedigreeSheet({
         height: geo.canvasH,
         background: paperTint,
         fontFamily,
-        color: INK,
+        color: palette.ink,
         margin: '0 auto',
         boxShadow: '0 0 0 1px #ddd',
       }}
@@ -807,6 +893,19 @@ export default function PedigreeSheet({
         <div style={{ position: 'absolute', left: dividerX1, top: damStartY + 3, fontSize: 10, fontWeight: 700, color: accent }}>♀ DAM'S SIDE</div>
       )}
 
+      {/* Explicit ancestry lines (Onyx & Gold build brief follow-up) — drawn
+          before the boxes so their solid backgrounds cover each line's
+          endpoint cleanly at the box edge, rather than the line visibly
+          poking into the box interior. pointerEvents:none keeps it out of
+          the way of dragging/editing the boxes above it. */}
+      {connectorPaths.length > 0 && (
+        <svg width={geo.canvasW} height={geo.canvasH} style={{ position: 'absolute', left: 0, top: 0, pointerEvents: 'none' }}>
+          {connectorPaths.map((d, i) => (
+            <path key={i} d={d} stroke={accent} strokeWidth={2.5} fill="none" strokeLinecap="round" />
+          ))}
+        </svg>
+      )}
+
       {boxes.map((box) => (
         <Box
           key={box.id}
@@ -824,6 +923,7 @@ export default function PedigreeSheet({
           fillColor={box.generation === 0 ? undefined : repeatColorMap.get(box.bird.id)}
           contentVersion={box.generation === 0 ? `${child.updatedAt ?? ''}:${JSON.stringify(prose).length}` : (box.bird.updatedAt ?? box.bird.id)}
           sheetScale={sheetScale}
+          palette={palette}
         >
           {box.generation === 0 ? (
             <ChildBoxBody
@@ -834,9 +934,10 @@ export default function PedigreeSheet({
               photoMaxHeight={tmpl.photoMaxHeight}
               hasRepeatedAncestors={repeatColorMap.size > 0}
               textScale={sheetScale}
+              palette={palette}
             />
           ) : (
-            <AncestorBoxBody bird={box.bird} ringFieldOrder={ringFieldOrder} />
+            <AncestorBoxBody bird={box.bird} ringFieldOrder={ringFieldOrder} palette={palette} />
           )}
         </Box>
       ))}
