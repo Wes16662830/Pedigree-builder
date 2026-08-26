@@ -243,7 +243,7 @@ export default function SettingsPage() {
       <div className="space-y-3 rounded-lg border border-neutral-200 bg-white p-5">
         <div className="flex items-center gap-4">
           {info?.loft.logoDataUrl ? (
-            <img src={info.loft.logoDataUrl} alt="loft logo" className="h-16 w-16 rounded object-cover" />
+            <img src={info.loft.logoDataUrl} alt="loft logo" className="h-16 w-16 rounded border border-neutral-100 object-contain" />
           ) : (
             <div className="flex h-16 w-16 items-center justify-center rounded bg-neutral-100 text-xs text-neutral-400">no logo</div>
           )}

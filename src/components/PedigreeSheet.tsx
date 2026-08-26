@@ -546,7 +546,16 @@ export default function PedigreeSheet({
 
   const borderInset = tmpl.decorative ? 12 : 0;
   const paperTint = tmpl.paperTint ?? '#fff';
+  // The initials placeholder (always a single glyph) looks right circular
+  // on decorative templates — but a real uploaded logo is almost never
+  // square, and a circular frame clips it at the tangent points on
+  // whichever axis it fills, on top of the crop object-fit:cover already
+  // does. Keep the circle for the placeholder only; the actual image
+  // always gets a plain rounded-rect frame instead, so the whole logo
+  // shows regardless of its aspect ratio (build brief follow-up: "the
+  // logo still doesn't look great, it seems to cut off").
   const logoRadius = tmpl.decorative ? '50%' : 6;
+  const uploadedLogoRadius = 8;
 
   return (
     <div
@@ -621,7 +630,14 @@ export default function PedigreeSheet({
             <img
               src={loft.logoDataUrl}
               alt={loftName}
-              style={{ width: sidebarLogoSize, height: sidebarLogoSize, borderRadius: logoRadius, objectFit: 'cover', marginBottom: 16, flexShrink: 0 }}
+              style={{
+                width: sidebarLogoSize,
+                height: sidebarLogoSize,
+                borderRadius: uploadedLogoRadius,
+                objectFit: 'contain',
+                marginBottom: 16,
+                flexShrink: 0,
+              }}
             />
           ) : (
             <div
@@ -709,7 +725,14 @@ export default function PedigreeSheet({
             <img
               src={loft.logoDataUrl}
               alt={loftName}
-              style={{ width: bandLogoSize, height: bandLogoSize, borderRadius: logoRadius, objectFit: 'cover', marginRight: 16, flexShrink: 0 }}
+              style={{
+                width: bandLogoSize,
+                height: bandLogoSize,
+                borderRadius: uploadedLogoRadius,
+                objectFit: 'contain',
+                marginRight: 16,
+                flexShrink: 0,
+              }}
             />
           ) : (
             <div
