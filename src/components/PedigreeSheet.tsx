@@ -166,7 +166,45 @@ function ResultLine({ raw, missing, warn }: { raw: string; missing: boolean; war
   );
 }
 
-function AncestorBoxBody({ bird, ringFieldOrder, palette }: { bird: Bird; ringFieldOrder: RingFieldOrder; palette: BoxPalette }) {
+// A 'tree' layout's boxes get geometrically shorter every generation back
+// (each one subdivides its band in half) — a 4th-generation box on a
+// landscape sheet is only ~40-50px tall. Box's own auto-shrink can only
+// take font size so far before it's illegible, and its overflow:visible
+// fallback assumes a box has clear space below it to spill into — true for
+// an isolated dense box, but false in a packed ancestor grid where the
+// very next box starts immediately below. A real bird with several notes
+// *and* several race results in a box that short doesn't just overflow,
+// it visually collides with the box below it — the reported "still not
+// looking great" garbled/overlapping text. Bounding how many notes/
+// results lines render, scaled to how much room the box actually has,
+// keeps every box's content within itself; nothing is silently dropped —
+// a "+N more" line says so, and the full record is still on the bird
+// itself (Bird Editor / the source upload), same as any other
+// flagged-for-review field.
+function capFor(h: number, roomy: number, tight: number, cramped: number): number {
+  if (h >= 220) return Infinity;
+  if (h >= 140) return roomy;
+  if (h >= 90) return tight;
+  return cramped;
+}
+
+function AncestorBoxBody({
+  bird,
+  ringFieldOrder,
+  palette,
+  boxHeight,
+}: {
+  bird: Bird;
+  ringFieldOrder: RingFieldOrder;
+  palette: BoxPalette;
+  boxHeight: number;
+}) {
+  const notesCap = capFor(boxHeight, 3, 1, 0);
+  const resultsCap = capFor(boxHeight, 5, 2, 1);
+  const shownNotes = bird.notes.slice(0, notesCap);
+  const shownResults = bird.results.slice(0, resultsCap);
+  const hiddenNotes = bird.notes.length - shownNotes.length;
+  const hiddenResults = bird.results.length - shownResults.length;
   return (
     <div style={{ lineHeight: 1.35 }}>
       {bird.photoUrl && <img src={bird.photoUrl} alt={bird.ring} style={{ width: '100%', maxHeight: 60, objectFit: 'cover', borderRadius: 3, marginBottom: 4 }} />}
@@ -174,21 +212,31 @@ function AncestorBoxBody({ bird, ringFieldOrder, palette }: { bird: Bird; ringFi
       {bird.name && <div style={{ fontSize: '0.85em', fontStyle: 'italic', marginBottom: 1 }}>"{bird.name}"</div>}
       {bird.colour && <div style={{ fontSize: '0.85em', color: palette.sub }}>{bird.colour}</div>}
       {bird.breeder && <div style={{ fontSize: '0.85em', color: palette.subtle }}>{bird.breeder}</div>}
-      {bird.notes.length > 0 && (
+      {shownNotes.length > 0 && (
         <div style={{ marginTop: 3, borderTop: `1px solid ${palette.border}`, paddingTop: 2 }}>
-          {bird.notes.map((n, i) => (
+          {shownNotes.map((n, i) => (
             <div key={i} style={{ fontSize: '0.85em', color: palette.sub, marginTop: i > 0 ? 2 : 0 }}>
               {n}
               {bird.notesEn?.[i] && <div style={{ fontStyle: 'italic', color: palette.faint }}>({bird.notesEn[i]})</div>}
             </div>
           ))}
+          {hiddenNotes > 0 && (
+            <div style={{ fontSize: '0.8em', color: palette.faint, fontStyle: 'italic', marginTop: 2 }}>
+              +{hiddenNotes} more note{hiddenNotes === 1 ? '' : 's'}
+            </div>
+          )}
         </div>
       )}
-      {bird.results.length > 0 && (
+      {shownResults.length > 0 && (
         <div style={{ marginTop: 3, borderTop: `1px solid ${palette.border}`, paddingTop: 2 }}>
-          {bird.results.map((r, i) => (
+          {shownResults.map((r, i) => (
             <ResultLine key={i} raw={r.raw} missing={r.position === undefined && r.poolSize === undefined} warn={palette.warn} />
           ))}
+          {hiddenResults > 0 && (
+            <div style={{ fontSize: '0.8em', color: palette.faint, fontStyle: 'italic', marginTop: 2 }}>
+              +{hiddenResults} more result{hiddenResults === 1 ? '' : 's'}
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -937,7 +985,7 @@ export default function PedigreeSheet({
               palette={palette}
             />
           ) : (
-            <AncestorBoxBody bird={box.bird} ringFieldOrder={ringFieldOrder} palette={palette} />
+            <AncestorBoxBody bird={box.bird} ringFieldOrder={ringFieldOrder} palette={palette} boxHeight={box.h} />
           )}
         </Box>
       ))}
