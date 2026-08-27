@@ -62,13 +62,22 @@ function logoSizeFor(base: number, min: number, max: number, scale: number): num
 // distinct repeated ancestors than colours, colours repeat — acceptable,
 // the prose text underneath still spells out exactly which bird and
 // generations each one is.
-const REPEAT_HIGHLIGHT_COLORS = ['#DBEAFE', '#FEF3C7', '#D1FAE5', '#FCE7F3', '#E9D5FF', '#FFEDD5', '#E5E7EB', '#CFFAFE'];
+// These are backgrounds a box's own body text sits directly on, so they
+// have to follow the sheet's theme: the pale tints below are right under
+// dark ink on a light page, but on a dark template (palette.ink is nearly
+// white) a highlighted box rendered light-on-light — the reported "white
+// writing on a white background". The dark set mirrors the same eight
+// hues at low lightness instead, so a highlight still reads as "this is
+// the same bird" while keeping the box's text legible.
+const REPEAT_HIGHLIGHT_COLORS_LIGHT = ['#DBEAFE', '#FEF3C7', '#D1FAE5', '#FCE7F3', '#E9D5FF', '#FFEDD5', '#E5E7EB', '#CFFAFE'];
+const REPEAT_HIGHLIGHT_COLORS_DARK = ['#1E3A5F', '#5C4813', '#14432F', '#5A1F3D', '#3B2A5C', '#5C3A16', '#3F3F42', '#134A52'];
 
-function buildRepeatColorMap(tree: Bird[], childId: string): Map<string, string> {
+function buildRepeatColorMap(tree: Bird[], childId: string, dark: boolean): Map<string, string> {
+  const palette = dark ? REPEAT_HIGHLIGHT_COLORS_DARK : REPEAT_HIGHLIGHT_COLORS_LIGHT;
   const groups = repeatedAncestorGroups(tree, childId);
   const map = new Map<string, string>();
   groups.forEach((ids, i) => {
-    const color = REPEAT_HIGHLIGHT_COLORS[i % REPEAT_HIGHLIGHT_COLORS.length];
+    const color = palette[i % palette.length];
     for (const id of ids) map.set(id, color);
   });
   return map;
@@ -640,9 +649,9 @@ export default function PedigreeSheet({
   const tmpl = templateById(templateId);
   const geo = geometryFor(tmpl.orientation, tmpl.headerStyle);
   const boxes = buildBoxes(child, indexById, tmpl.layoutKind, geo);
-  const repeatColorMap = buildRepeatColorMap(tree, child.id);
   const sheetScale = sheetFontScale(layout);
   const palette = paletteFor(!!tmpl.dark);
+  const repeatColorMap = buildRepeatColorMap(tree, child.id, !!tmpl.dark);
   const connectorPaths = tmpl.connectorLines && tmpl.layoutKind === 'tree' ? buildConnectorPaths(boxes) : [];
 
   const headerBg = printVariant === 'black-header' ? INK : '#fff';
