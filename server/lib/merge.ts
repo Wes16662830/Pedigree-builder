@@ -33,6 +33,32 @@ function roleLabel(path: PedigreeSide[]): string {
   return `${named.slice(0, -1).join(' ')} ${path[path.length - 1]}`;
 }
 
+// The merge routes hand `child` through from the raw request body, so
+// coerce these two array fields rather than trusting their shape — a
+// malformed `results` would otherwise reach the sheet renderer and the
+// prose prompt as-is.
+export function cleanResults(results: unknown): Bird['results'] {
+  if (!Array.isArray(results)) return [];
+  return results
+    .filter((r): r is Record<string, unknown> => !!r && typeof r === 'object')
+    .map((r) => ({
+      race: typeof r.race === 'string' ? r.race : '',
+      distanceKm: typeof r.distanceKm === 'number' ? r.distanceKm : undefined,
+      year: typeof r.year === 'number' ? r.year : undefined,
+      position: typeof r.position === 'number' ? r.position : undefined,
+      poolSize: typeof r.poolSize === 'number' ? r.poolSize : undefined,
+      federation: typeof r.federation === 'string' ? r.federation : undefined,
+      raw: typeof r.raw === 'string' ? r.raw : '',
+    }))
+    // A row with neither a race name nor verbatim text carries nothing.
+    .filter((r) => r.race.trim() || r.raw.trim());
+}
+
+export function cleanNotes(notes: unknown): string[] {
+  if (!Array.isArray(notes)) return [];
+  return notes.filter((n): n is string => typeof n === 'string' && n.trim().length > 0);
+}
+
 export interface MergeInput {
   sireRootId: string;
   damRootId: string;
@@ -44,6 +70,13 @@ export interface MergeInput {
     sex?: Bird['sex'];
     breeder?: string;
     loftAddress?: string;
+    // The child's own race record / prose notes, entered by the operator on
+    // the merge form. These are not just display data: they're folded into
+    // the prose call's grounding below, so a child with its own results gets
+    // prose that actually accounts for them rather than describing it purely
+    // through its parents.
+    results?: Bird['results'];
+    notes?: string[];
   };
   // Present only when this side came from a fresh upload this session —
   // reusing an already-verified bird on file has no upload of its own.
@@ -75,8 +108,8 @@ export async function mergePedigree(input: MergeInput): Promise<MergeResult> {
     sex: input.child.sex ?? 'unknown',
     breeder: input.child.breeder,
     loftAddress: input.child.loftAddress,
-    notes: [],
-    results: [],
+    notes: cleanNotes(input.child.notes),
+    results: cleanResults(input.child.results),
     sireId: sireRoot.id,
     damId: damRoot.id,
     confidence: 1,

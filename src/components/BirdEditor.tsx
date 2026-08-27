@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import type { Bird, Result, Sex } from '../../shared/types';
+import type { Bird, Sex } from '../../shared/types';
 import { CONFIDENCE_FLAG_THRESHOLD } from '../../shared/types';
-import { deleteBirdPhoto, extractRaceResults, uploadBirdPhoto } from '../lib/api';
+import { deleteBirdPhoto, uploadBirdPhoto } from '../lib/api';
+import { ResultsEditor } from './ResultsEditor';
 
 // The full bird field editor — ring/name/sex/colour/breeder/notes/results,
 // plus an optional photo. Used both in Phase 2 verification (one card per
@@ -14,127 +15,6 @@ function linesToArray(text: string): string[] {
     .split('\n')
     .map((l) => l.trim())
     .filter(Boolean);
-}
-
-function ResultRow({ result, onChange, onRemove }: { result: Result; onChange: (r: Result) => void; onRemove: () => void }) {
-  return (
-    <div className="grid grid-cols-6 gap-1 rounded border border-neutral-200 p-2 text-xs">
-      <input className="col-span-2 rounded border px-1 py-0.5" placeholder="race" value={result.race} onChange={(e) => onChange({ ...result, race: e.target.value })} />
-      <input
-        className="rounded border px-1 py-0.5"
-        placeholder="year"
-        type="number"
-        value={result.year ?? ''}
-        onChange={(e) => onChange({ ...result, year: e.target.value ? Number(e.target.value) : undefined })}
-      />
-      <input
-        className="rounded border px-1 py-0.5"
-        placeholder="position"
-        type="number"
-        value={result.position ?? ''}
-        onChange={(e) => onChange({ ...result, position: e.target.value ? Number(e.target.value) : undefined })}
-      />
-      <input
-        className="rounded border px-1 py-0.5"
-        placeholder="pool"
-        type="number"
-        value={result.poolSize ?? ''}
-        onChange={(e) => onChange({ ...result, poolSize: e.target.value ? Number(e.target.value) : undefined })}
-      />
-      <button onClick={onRemove} className="rounded border border-red-200 px-1 text-red-600 hover:bg-red-50">
-        remove
-      </button>
-      <input
-        className="col-span-6 rounded border px-1 py-0.5 font-mono"
-        placeholder="verbatim source text"
-        value={result.raw}
-        onChange={(e) => onChange({ ...result, raw: e.target.value })}
-      />
-      {result.position === undefined && (
-        <p className="col-span-6 fill">No position/pool recorded — will render as an unrecorded placeholder, not omitted.</p>
-      )}
-    </div>
-  );
-}
-
-// Paste (Ctrl+V) or upload a screenshot of a race-history table — e.g. a
-// oneloft results extract — and get its rows parsed straight into the
-// Results list below, instead of typing each race in by hand. Extracted
-// rows land as ordinary editable ResultRow entries, so nothing here
-// bypasses the usual "review what the model read" step (build brief §7).
-function ResultsPasteZone({ onExtracted }: { onExtracted: (results: Result[]) => void }) {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string>();
-  const [note, setNote] = useState<string>();
-  const fileRef = useRef<HTMLInputElement>(null);
-
-  async function handleFile(file: File) {
-    setBusy(true);
-    setError(undefined);
-    setNote(undefined);
-    try {
-      const { results, extractionNotes } = await extractRaceResults(file);
-      if (!results.length) {
-        setError('No race rows found in that image — try a clearer screenshot.');
-        return;
-      }
-      onExtracted(results);
-      if (extractionNotes) setNote(extractionNotes);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Extraction failed');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  function onPaste(e: React.ClipboardEvent) {
-    const item = Array.from(e.clipboardData.items).find((it) => it.type.startsWith('image/'));
-    const file = item?.getAsFile();
-    if (file) {
-      e.preventDefault();
-      handleFile(file);
-    }
-  }
-
-  return (
-    <div
-      tabIndex={0}
-      onPaste={onPaste}
-      onClick={(e) => e.stopPropagation()}
-      className="rounded-md border-2 border-dashed border-neutral-300 p-2 text-center text-xs text-neutral-500 focus:border-neutral-500 focus:outline-none"
-    >
-      {busy ? (
-        'Extracting race rows…'
-      ) : (
-        <>
-          Click here, then paste (Ctrl+V) a race-results screenshot, or{' '}
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              fileRef.current?.click();
-            }}
-            className="underline hover:text-neutral-700"
-          >
-            upload one
-          </button>
-        </>
-      )}
-      <input
-        ref={fileRef}
-        type="file"
-        accept="image/png,image/jpeg,image/webp,image/gif"
-        className="hidden"
-        onChange={(e) => {
-          const file = e.target.files?.[0];
-          if (file) handleFile(file);
-          e.target.value = '';
-        }}
-      />
-      {error && <p className="mt-1 text-red-600">{error}</p>}
-      {note && <p className="mt-1 italic text-neutral-400">Model note: {note}</p>}
-    </div>
-  );
 }
 
 export interface BirdEditorProps {
@@ -305,39 +185,14 @@ export default function BirdEditor({ bird, onSave, active, onFocus, showConfiden
           />
         </label>
 
-        <div className="col-span-2 space-y-1">
-          <span className="block text-xs text-neutral-500">Results</span>
-          <ResultsPasteZone
-            onExtracted={(extracted) => {
-              const results = [...local.results, ...extracted];
+        <div className="col-span-2">
+          <ResultsEditor
+            results={local.results}
+            onChange={(results) => {
               commit({ results });
+              onSave({ ...local, results });
             }}
           />
-          {local.results.map((r, i) => (
-            <ResultRow
-              key={i}
-              result={r}
-              onChange={(nr) => {
-                const results = local.results.map((rr, ii) => (ii === i ? nr : rr));
-                commit({ results });
-                onSave({ ...local, results });
-              }}
-              onRemove={() => {
-                const results = local.results.filter((_, ii) => ii !== i);
-                commit({ results });
-                onSave({ ...local, results });
-              }}
-            />
-          ))}
-          <button
-            className="text-xs text-neutral-500 underline"
-            onClick={() => {
-              const results = [...local.results, { race: '', raw: '' }];
-              commit({ results });
-            }}
-          >
-            + add result
-          </button>
         </div>
       </div>
 

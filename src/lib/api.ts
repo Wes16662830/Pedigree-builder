@@ -118,7 +118,7 @@ export interface MergeSideInput {
 export interface MergeInput {
   sire: MergeSideInput;
   dam: MergeSideInput;
-  child: { ring: string; name?: string; sex?: Bird['sex']; colour?: string; breeder?: string; loftAddress?: string };
+  child: { ring: string; name?: string; sex?: Bird['sex']; colour?: string; breeder?: string; loftAddress?: string; results?: Bird['results']; notes?: string[] };
 }
 
 export interface MergeResult {

@@ -311,13 +311,19 @@ function ChildBoxBody({
   // Skipped entirely in Text edit mode: clamping hides the tail of a
   // paragraph, which is exactly the text an operator may be trying to click
   // into and fix. It spills while editing and re-clamps on the way out.
-  const sectionCount = 4 + (prose.loftCredentials.length > 0 ? 1 : 0);
+  const hasResults = child.results.length > 0;
+  const hasNotes = child.notes.length > 0;
+  const sectionCount = 4 + (prose.loftCredentials.length > 0 ? 1 : 0) + (hasResults ? 1 : 0) + (hasNotes ? 1 : 0);
   const identityPx = (child.photoUrl ? photoMaxHeight + 8 : 0) + 62 * textScale;
   const headingsPx = sectionCount * 24;
   const bodyPx = Math.max(0, boxHeight - 14 - identityPx - headingsPx);
   const linePx = 14 * 0.85 * 1.3; // prose is 0.85em at the 14px child-box base
   const perSection = Math.max(2, Math.floor(bodyPx / linePx / sectionCount));
   const proseClamp = clamp ? clampLines(perSection) : undefined;
+  // Notes/results are short lines rather than paragraphs, so they're capped
+  // by row count against the same budget instead of line-clamped.
+  const notesCap = clamp ? Math.max(1, perSection) : child.notes.length;
+  const resultsCap = clamp ? Math.max(1, perSection) : child.results.length;
 
   const sectionHeading: React.CSSProperties = {
     fontWeight: 700,
@@ -345,7 +351,43 @@ function ChildBoxBody({
 
       <hr style={{ margin: '7px 0 0', borderColor: palette.border }} />
 
-      <div style={{ ...sectionHeading, marginTop: 6 }}>BREEDING</div>
+      {/* The child's own notes and race record, entered on the merge form.
+          These sit ahead of the generated prose deliberately: what this bird
+          has itself done outranks commentary about its ancestry. Both are
+          bounded by the same line budget as everything else — the row cap
+          keeps a long race history from starving the prose sections, and
+          says how many it left out rather than dropping them silently. */}
+      {hasNotes && (
+        <>
+          <div style={{ ...sectionHeading, marginTop: 6 }}>NOTES</div>
+          {child.notes.slice(0, notesCap).map((n, i) => (
+            <p key={i} style={{ ...proseStyle, marginTop: i === 0 ? 0 : 2 }}>
+              {n}
+            </p>
+          ))}
+          {child.notes.length > notesCap && (
+            <p style={{ fontSize: '0.72em', color: palette.faint, fontStyle: 'italic', margin: 0 }}>+{child.notes.length - notesCap} more</p>
+          )}
+        </>
+      )}
+
+      {hasResults && (
+        <>
+          <div style={{ ...sectionHeading, marginTop: hasNotes ? 7 : 6 }}>RACE RECORD</div>
+          {child.results.slice(0, resultsCap).map((r, i) => (
+            <div key={i} style={{ fontSize: '0.85em', lineHeight: 1.3 }}>
+              <ResultLine raw={r.raw} missing={r.position === undefined && r.poolSize === undefined} warn={palette.warn} />
+            </div>
+          ))}
+          {child.results.length > resultsCap && (
+            <p style={{ fontSize: '0.72em', color: palette.faint, fontStyle: 'italic', margin: 0 }}>
+              +{child.results.length - resultsCap} more result{child.results.length - resultsCap === 1 ? '' : 's'}
+            </p>
+          )}
+        </>
+      )}
+
+      <div style={{ ...sectionHeading, marginTop: hasResults || hasNotes ? 7 : 6 }}>BREEDING</div>
       <p style={proseStyle}>{prose.breeding}</p>
 
       <div style={sectionHeading}>LINE-BREEDING OF NOTE</div>
