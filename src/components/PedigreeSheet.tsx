@@ -252,6 +252,19 @@ function AncestorBoxBody({
   );
 }
 
+// Clamps a prose block to a fixed number of rendered lines, with a "…"
+// added by the browser — the layout-safe way to bound free-form text whose
+// length nobody controls (the prose sections are model-generated and can
+// run to several paragraphs).
+function clampLines(lines: number): React.CSSProperties {
+  return {
+    display: '-webkit-box',
+    WebkitLineClamp: lines,
+    WebkitBoxOrient: 'vertical',
+    overflow: 'hidden',
+  };
+}
+
 function ChildBoxBody({
   child,
   prose,
@@ -261,6 +274,8 @@ function ChildBoxBody({
   hasRepeatedAncestors,
   textScale,
   palette,
+  boxHeight,
+  clamp,
 }: {
   child: Bird;
   prose: PedigreeProse;
@@ -277,52 +292,91 @@ function ChildBoxBody({
   // two most prominent lines.
   textScale: number;
   palette: BoxPalette;
+  boxHeight: number;
+  // False while the operator is editing text directly on the sheet — see
+  // the budget comment below.
+  clamp: boolean;
 }) {
+  // The prose sections are model-generated free text with no length bound,
+  // and unlike an ancestor box (a handful of short note/result lines, capped
+  // by count) the child card's content is mostly *paragraphs* — so capping
+  // by item count does nothing here. Budget actual vertical space instead:
+  // subtract what the identity block and the section headings will occupy
+  // from the box's own height, then split what's left evenly across the
+  // sections that are actually present, and clamp each to that many lines.
+  // Deliberately conservative — Box's auto-shrink still runs afterwards and
+  // can only make text smaller (so more lines fit than budgeted, never
+  // fewer), which is the safe direction to be wrong in.
+  //
+  // Skipped entirely in Text edit mode: clamping hides the tail of a
+  // paragraph, which is exactly the text an operator may be trying to click
+  // into and fix. It spills while editing and re-clamps on the way out.
+  const sectionCount = 4 + (prose.loftCredentials.length > 0 ? 1 : 0);
+  const identityPx = (child.photoUrl ? photoMaxHeight + 8 : 0) + 62 * textScale;
+  const headingsPx = sectionCount * 24;
+  const bodyPx = Math.max(0, boxHeight - 14 - identityPx - headingsPx);
+  const linePx = 14 * 0.85 * 1.3; // prose is 0.85em at the 14px child-box base
+  const perSection = Math.max(2, Math.floor(bodyPx / linePx / sectionCount));
+  const proseClamp = clamp ? clampLines(perSection) : undefined;
+
   const sectionHeading: React.CSSProperties = {
     fontWeight: 700,
-    fontSize: '0.85em',
+    fontSize: '0.8em',
     color: accent,
-    letterSpacing: 0.6,
-    marginTop: 10,
-    marginBottom: 3,
+    letterSpacing: 0.5,
+    marginTop: 7,
+    marginBottom: 1,
   };
+  const proseStyle: React.CSSProperties = { fontSize: '0.85em', margin: 0, ...proseClamp };
+
   return (
-    <div style={{ lineHeight: 1.4 }}>
+    <div style={{ lineHeight: 1.3 }}>
       {child.photoUrl && (
-        <img src={child.photoUrl} alt={child.ring} style={{ width: '100%', maxHeight: photoMaxHeight, objectFit: 'cover', borderRadius: 4, marginBottom: 8 }} />
+        <img src={child.photoUrl} alt={child.ring} style={{ width: '100%', maxHeight: photoMaxHeight, objectFit: 'cover', borderRadius: 4, marginBottom: 6 }} />
       )}
-      <div style={{ fontSize: 18 * textScale, fontWeight: 800 }}>{displayRing(child.ring, ringFieldOrder)}</div>
-      {child.name && <div style={{ fontStyle: 'italic', fontSize: 12 * textScale, marginTop: 1 }}>"{child.name}"</div>}
-      {child.colour && <div style={{ fontSize: '0.85em', marginTop: 3, color: palette.sub }}>{child.colour}</div>}
-      {child.breeder && <div style={{ fontSize: '0.85em', color: palette.subtle }}>{child.breeder}</div>}
-      {child.loftAddress && <div style={{ fontSize: '0.85em', color: palette.faint }}>{child.loftAddress}</div>}
+      <div style={{ fontSize: 17 * textScale, fontWeight: 800, lineHeight: 1.15 }}>{displayRing(child.ring, ringFieldOrder)}</div>
+      {child.name && <div style={{ fontStyle: 'italic', fontSize: 11.5 * textScale, marginTop: 1 }}>"{child.name}"</div>}
+      {/* Colour / breeder / address are one-liners each — ellipsis rather
+          than wrap, so a long breeder name can't push the prose budget out
+          from under itself. */}
+      {child.colour && <div style={{ fontSize: '0.8em', marginTop: 2, color: palette.sub, ...clampLines(1) }}>{child.colour}</div>}
+      {child.breeder && <div style={{ fontSize: '0.8em', color: palette.subtle, ...clampLines(1) }}>{child.breeder}</div>}
+      {child.loftAddress && <div style={{ fontSize: '0.8em', color: palette.faint, ...clampLines(1) }}>{child.loftAddress}</div>}
 
-      <hr style={{ margin: '10px 0 0', borderColor: palette.border }} />
+      <hr style={{ margin: '7px 0 0', borderColor: palette.border }} />
 
-      <div style={{ ...sectionHeading, marginTop: 8 }}>BREEDING</div>
-      <p style={{ fontSize: '0.85em', marginBottom: 0 }}>{prose.breeding}</p>
+      <div style={{ ...sectionHeading, marginTop: 6 }}>BREEDING</div>
+      <p style={proseStyle}>{prose.breeding}</p>
 
       <div style={sectionHeading}>LINE-BREEDING OF NOTE</div>
-      <p style={{ fontSize: '0.85em', marginBottom: 0 }}>
+      <p style={proseStyle}>
         {prose.lineBreedingOfNote || <span style={{ color: palette.warn, fontStyle: 'italic' }}>none detected</span>}
       </p>
       {hasRepeatedAncestors && (
-        <p style={{ fontSize: '0.75em', color: palette.faint, fontStyle: 'italic', marginTop: 2, marginBottom: 0 }}>
-          Matching coloured boxes on this sheet mark the same ancestor appearing more than once.
+        <p style={{ fontSize: '0.72em', color: palette.faint, fontStyle: 'italic', marginTop: 2, marginBottom: 0, ...(clamp ? clampLines(2) : {}) }}>
+          Matching coloured boxes mark the same ancestor appearing more than once.
         </p>
       )}
 
       <div style={sectionHeading}>SIRE'S OWN RECORD</div>
-      <p style={{ fontSize: '0.85em', marginBottom: 0 }}>{prose.sireOwnRecord}</p>
+      <p style={proseStyle}>{prose.sireOwnRecord}</p>
 
       <div style={sectionHeading}>DAM'S OWN RECORD</div>
-      <p style={{ fontSize: '0.85em', marginBottom: 0 }}>{prose.damOwnRecord}</p>
+      <p style={proseStyle}>{prose.damOwnRecord}</p>
 
       {prose.loftCredentials.length > 0 && (
         <>
           <div style={sectionHeading}>LOFT CREDENTIALS</div>
           {prose.loftCredentials.map((c, i) => (
-            <p key={i} style={{ fontSize: '0.8em', marginBottom: i === prose.loftCredentials.length - 1 ? 0 : 4 }}>
+            <p
+              key={i}
+              style={{
+                fontSize: '0.78em',
+                margin: 0,
+                marginTop: i === 0 ? 0 : 3,
+                ...(clamp ? clampLines(Math.max(2, Math.floor(perSection / prose.loftCredentials.length))) : {}),
+              }}
+            >
               <strong>{c.loftName}:</strong> {c.claim}
             </p>
           ))}
@@ -992,6 +1046,8 @@ export default function PedigreeSheet({
               hasRepeatedAncestors={repeatColorMap.size > 0}
               textScale={sheetScale}
               palette={palette}
+              boxHeight={box.h}
+              clamp={editMode !== 'text'}
             />
           ) : (
             <AncestorBoxBody bird={box.bird} ringFieldOrder={ringFieldOrder} palette={palette} boxHeight={box.h} />
