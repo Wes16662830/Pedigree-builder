@@ -30,6 +30,7 @@ export default function SheetPage({ childPedigreeId, onBack }: Props) {
   const [saving, setSaving] = useState(false);
   const sheetRef = useRef<HTMLDivElement>(null);
   const previewRef = useRef<HTMLDivElement>(null);
+  const textBaselineRef = useRef<Record<string, string> | null>(null);
   const [previewScale, setPreviewScale] = useState(1);
 
   useEffect(() => {
@@ -114,17 +115,67 @@ export default function SheetPage({ childPedigreeId, onBack }: Props) {
   // exactly what's on screen, regardless of how the user got there. Scoped
   // to Text mode specifically so a Layout-mode save (dragging a box, the
   // text-size slider) never spuriously freezes every box's content.
+  // Snapshot every box's rendered HTML on entering Text mode, so the save
+  // below can tell an actually-edited box from an untouched one.
+  //
+  // Without this the capture froze EVERY box, not just edited ones: one
+  // Save while in Text mode replaced the whole sheet with a static HTML
+  // snapshot, after which no data change could ever surface again — a
+  // newly added race result, an edited bird, a corrected ring, all
+  // silently ignored because the box was rendering last week's markup.
+  // (That is exactly what "why are the child results not showing"
+  // turned out to be.)
+  useEffect(() => {
+    if (editMode !== 'text') {
+      textBaselineRef.current = null;
+      return;
+    }
+    const sheetEl = sheetRef.current;
+    if (!sheetEl) return;
+    const baseline: Record<string, string> = {};
+    sheetEl.querySelectorAll<HTMLElement>('[data-box-id]').forEach((boxEl) => {
+      const boxId = boxEl.getAttribute('data-box-id');
+      const contentEl = boxEl.querySelector<HTMLElement>('[data-box-content]');
+      if (boxId && contentEl) baseline[boxId] = contentEl.innerHTML;
+    });
+    textBaselineRef.current = baseline;
+  }, [editMode, child, templateId]);
+
   function captureTextEdits(base: LayoutState): LayoutState {
     const sheetEl = sheetRef.current;
     if (!sheetEl || editMode !== 'text') return base;
+    const baseline = textBaselineRef.current;
+    if (!baseline) return base;
     const next = { ...base };
     sheetEl.querySelectorAll<HTMLElement>('[data-box-id]').forEach((boxEl) => {
       const boxId = boxEl.getAttribute('data-box-id');
       const contentEl = boxEl.querySelector<HTMLElement>('[data-box-content]');
       if (!boxId || !contentEl) return;
-      next[boxId] = { ...next[boxId], text: contentEl.innerHTML };
+      // Only a box whose content actually changed gets frozen. Everything
+      // else keeps rendering from the bird/prose data, so later edits and
+      // template switches still show up.
+      if (contentEl.innerHTML !== baseline[boxId]) {
+        next[boxId] = { ...next[boxId], text: contentEl.innerHTML };
+      }
     });
     return next;
+  }
+
+  // Remedy for a sheet frozen by the old capture (or by edits the operator
+  // now wants to abandon): drop every text override while keeping box
+  // positions, sizes and font scales intact, so the sheet goes back to
+  // rendering live data without losing the layout work.
+  const frozenBoxCount = Object.values(layout).filter((o) => o?.text !== undefined).length;
+  function clearTextOverrides() {
+    setLayout((prev) => {
+      const next: LayoutState = {};
+      for (const [id, ov] of Object.entries(prev)) {
+        if (!ov) continue;
+        const { text: _drop, ...rest } = ov;
+        if (Object.keys(rest).length) next[id] = rest;
+      }
+      return next;
+    });
   }
 
   async function saveLayout() {
@@ -214,6 +265,16 @@ export default function SheetPage({ childPedigreeId, onBack }: Props) {
         {editMode === 'layout' && (
           <button onClick={resetAll} className="rounded-md border px-3 py-1.5 text-sm hover:bg-neutral-50">
             Reset all layout
+          </button>
+        )}
+
+        {frozenBoxCount > 0 && (
+          <button
+            onClick={clearTextOverrides}
+            title="These boxes are showing saved text instead of live data, so edits to a bird (new race results, a corrected ring) won't appear in them. This restores them from the data — box positions and sizes are kept."
+            className="rounded-md border border-amber-300 bg-amber-50 px-3 py-1.5 text-sm text-amber-900 hover:bg-amber-100"
+          >
+            Restore {frozenBoxCount} box{frozenBoxCount === 1 ? '' : 'es'} from data
           </button>
         )}
 
