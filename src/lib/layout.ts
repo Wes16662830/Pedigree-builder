@@ -200,9 +200,20 @@ export interface BoxOverride {
   // the live DOM on Save while in Text edit mode (see saveLayout in
   // SheetPage.tsx) — not plain text, so the ring's bold weight, italic
   // name, etc. survive an edit. Once set, this box renders the snapshot
-  // verbatim instead of recomputing from the bird/prose data, same
-  // override-wins-until-reset rule as dx/dy/scale/fontScale.
+  // instead of recomputing from the bird/prose data.
   text?: string;
+  // When `text` was captured. A hand edit outranks the data only until the
+  // data itself moves on: once the underlying bird is edited (its
+  // updatedAt passes this), the snapshot is stale by definition and the
+  // box goes back to rendering live data. Without this a frozen box
+  // silently swallowed every later edit — the operator saved a change,
+  // saw nothing happen, and reasonably concluded Save was broken.
+  //
+  // An override with no textAt predates this field, from a build that
+  // froze every box on any Text-mode save rather than only edited ones,
+  // so it is treated as stale too — those are overwhelmingly not real
+  // edits, and keeping them means keeping the bug.
+  textAt?: string;
 }
 
 export const DEFAULT_OVERRIDE: BoxOverride = { dx: 0, dy: 0, scale: 1, fontScale: 1 };

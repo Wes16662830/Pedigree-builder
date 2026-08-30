@@ -445,6 +445,7 @@ function Box({
   contentVersion,
   sheetScale,
   palette,
+  dataUpdatedAt,
 }: {
   boxId: string;
   x: number;
@@ -474,8 +475,15 @@ function Box({
   // reads a bit small/large", the other for "this one box specifically".
   sheetScale: number;
   palette: BoxPalette;
+  // ISO timestamp of the underlying bird's last data edit, used to decide
+  // whether a saved text snapshot is still current — see BoxOverride.textAt.
+  dataUpdatedAt?: string;
 }) {
   const ov = overrideFor(layout, boxId);
+  // A hand-edited snapshot holds until the bird's own data is edited after
+  // it was taken; then live data wins. Missing textAt = pre-dates the
+  // timestamp, so treated as stale (see BoxOverride.textAt).
+  const textIsCurrent = ov.text !== undefined && !!ov.textAt && (!dataUpdatedAt || ov.textAt >= dataUpdatedAt);
   const dragRef = useRef<{ startX: number; startY: number; ox: number; oy: number } | null>(null);
   const resizeRef = useRef<{ startX: number; startY: number; scale: number } | null>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -636,13 +644,13 @@ function Box({
           entirely via dangerouslySetInnerHTML instead of `children`; React
           won't allow passing both, hence the branch rather than a
           conditional prop. */}
-      {ov.text !== undefined ? (
+      {textIsCurrent ? (
         <div
           ref={contentRef}
           data-box-content
           style={contentStyle}
           // eslint-disable-next-line react/no-danger
-          dangerouslySetInnerHTML={{ __html: ov.text }}
+          dangerouslySetInnerHTML={{ __html: ov.text as string }}
         />
       ) : (
         <div ref={contentRef} data-box-content style={contentStyle}>
@@ -1077,6 +1085,7 @@ export default function PedigreeSheet({
           contentVersion={box.generation === 0 ? `${child.updatedAt ?? ''}:${JSON.stringify(prose).length}` : (box.bird.updatedAt ?? box.bird.id)}
           sheetScale={sheetScale}
           palette={palette}
+          dataUpdatedAt={box.generation === 0 ? child.updatedAt : box.bird.updatedAt}
         >
           {box.generation === 0 ? (
             <ChildBoxBody

@@ -64,7 +64,11 @@ birdsRouter.put('/:id', (req, res) => {
     ringNormalised: patch.ring ? normaliseRing(patch.ring) : existing.ringNormalised,
   };
   saveBird(merged);
-  res.json(merged);
+  // Re-read rather than echoing the merged input: the row's updated_at is
+  // set by the INSERT..ON CONFLICT above, so the object we just built still
+  // carries the previous timestamp. Callers rely on the new one to know the
+  // data has moved on (see BoxOverride.textAt in src/lib/layout.ts).
+  res.json(getBird(merged.id) ?? merged);
 });
 
 // POST /api/birds/:id/verify — mark one bird confirmed by a human. This does

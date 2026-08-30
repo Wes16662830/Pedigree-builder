@@ -155,9 +155,32 @@ export default function SheetPage({ childPedigreeId, onBack }: Props) {
       // else keeps rendering from the bird/prose data, so later edits and
       // template switches still show up.
       if (contentEl.innerHTML !== baseline[boxId]) {
-        next[boxId] = { ...next[boxId], text: contentEl.innerHTML };
+        next[boxId] = { ...next[boxId], text: contentEl.innerHTML, textAt: new Date().toISOString() };
       }
     });
+    return next;
+  }
+
+  // A snapshot the bird's data has already moved past is dead weight — the
+  // sheet ignores it when rendering (see BoxOverride.textAt), so drop it on
+  // the next save rather than leaving it in the stored layout to confuse
+  // whoever reads it next.
+  function pruneStaleText(state: LayoutState): LayoutState {
+    const updatedAtOf = new Map<string, string | undefined>();
+    if (child) updatedAtOf.set(child.id, child.updatedAt);
+    for (const b of tree) updatedAtOf.set(b.id, b.updatedAt);
+    const next: LayoutState = {};
+    for (const [id, ov] of Object.entries(state)) {
+      if (!ov) continue;
+      const dataAt = updatedAtOf.get(id);
+      const stale = ov.text !== undefined && (!ov.textAt || (dataAt ? ov.textAt < dataAt : false));
+      if (!stale) {
+        next[id] = ov;
+        continue;
+      }
+      const { text: _t, textAt: _a, ...rest } = ov;
+      if (Object.keys(rest).length) next[id] = rest;
+    }
     return next;
   }
 
@@ -166,6 +189,7 @@ export default function SheetPage({ childPedigreeId, onBack }: Props) {
   // positions, sizes and font scales intact, so the sheet goes back to
   // rendering live data without losing the layout work.
   const frozenBoxCount = Object.values(layout).filter((o) => o?.text !== undefined).length;
+
   function clearTextOverrides() {
     setLayout((prev) => {
       const next: LayoutState = {};
@@ -182,7 +206,7 @@ export default function SheetPage({ childPedigreeId, onBack }: Props) {
     setSaving(true);
     setError(undefined);
     try {
-      const withTextEdits = captureTextEdits(layout);
+      const withTextEdits = pruneStaleText(captureTextEdits(layout));
       setLayout(withTextEdits);
       await patchPedigree(childPedigreeId, { layout: withTextEdits, ringFieldOrder, printVariant, template: templateId });
     } catch (e) {
@@ -204,9 +228,15 @@ export default function SheetPage({ childPedigreeId, onBack }: Props) {
   async function saveChildEdits(bird: Bird) {
     setChild(bird);
     try {
-      await updateBird(bird.id, bird);
+      // Take the server's copy back, not the one we sent: it carries the
+      // recomputed ringNormalised and, importantly, the new updatedAt that
+      // tells a saved text snapshot it has been outlived (BoxOverride.textAt).
+      // Keeping the local copy left the client believing the data was older
+      // than it is, so stale snapshots never got pruned on save.
+      const saved = await updateBird(bird.id, bird);
+      setChild(saved);
       // Keep the tree in sync in case this same bird also appears there.
-      setTree((prev) => prev.map((b) => (b.id === bird.id ? bird : b)));
+      setTree((prev) => prev.map((b) => (b.id === saved.id ? saved : b)));
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Save failed');
     }

@@ -33,7 +33,9 @@ birdsRouter.put('/:id', async (c) => {
     ringNormalised: patch.ring ? normaliseRing(patch.ring) : existing.ringNormalised,
   };
   await saveBird(c.env.DB, merged);
-  return c.json(merged);
+  // Re-read rather than echoing the merged input — see the matching comment
+  // in server/routes/birds.ts.
+  return c.json((await getBird(c.env.DB, merged.id)) ?? merged);
 });
 
 birdsRouter.post('/:id/verify', async (c) => {
