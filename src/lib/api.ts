@@ -147,6 +147,13 @@ export function deleteChildPedigree(id: string): Promise<void> {
   return api(`/merge/${id}`, { method: 'DELETE' });
 }
 
+// Same DELETE, but with keepalive so the browser still sends it while the
+// page is unloading — used to flush a delete the operator has confirmed but
+// whose undo window hasn't elapsed when they close the tab (see HomePage).
+export function deleteChildPedigreeKeepalive(id: string): void {
+  void fetch(`/api/merge/${id}`, { method: 'DELETE', keepalive: true }).catch(() => {});
+}
+
 export interface ChildPedigreeDetail {
   id: string;
   child_bird_id: string;

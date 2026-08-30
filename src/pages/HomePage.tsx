@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   createFolder,
   deleteChildPedigree,
+  deleteChildPedigreeKeepalive,
   deleteFolder,
   getAllBirds,
   getFolders,
@@ -26,6 +27,12 @@ type SortKey = 'newest' | 'oldest' | 'ring';
 // call itself is deferred until this elapses, so "Undo" is a real cancel
 // (clear the timer) rather than a restore-from-trash that would need its
 // own endpoint.
+// Undo is a *deferred commit*, never a cancellable-by-accident one: the
+// only thing that calls off a pending delete is the operator pressing Undo.
+// Anything else that ends the window — navigating away, deleting a second
+// pedigree, closing the tab — commits it instead. Getting this backwards is
+// what made "Delete" look broken: the row vanished, the DELETE was then
+// silently dropped on unmount, and the pedigree reappeared on next load.
 const UNDO_WINDOW_MS = 6000;
 
 export default function HomePage({ onNew, onOpen }: Props) {
@@ -37,7 +44,11 @@ export default function HomePage({ onNew, onOpen }: Props) {
   const [newFolderName, setNewFolderName] = useState('');
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState<SortKey>('newest');
-  const [pendingDelete, setPendingDelete] = useState<{ id: string; label: string; timer: ReturnType<typeof setTimeout> }>();
+  const [pendingDelete, setPendingDelete] = useState<{ id: string; label: string }>();
+  // Held in a ref as well as state: the unmount cleanup below has to reach
+  // the live pending delete without re-running (and so re-arming) every time
+  // the state object's identity changes.
+  const pendingRef = useRef<{ id: string; label: string; timer: ReturnType<typeof setTimeout> } | null>(null);
 
   function load() {
     Promise.all([listChildPedigrees(), getFolders(), getAllBirds()])
@@ -50,31 +61,65 @@ export default function HomePage({ onNew, onOpen }: Props) {
   }
 
   useEffect(load, []);
-  useEffect(() => () => pendingDelete && clearTimeout(pendingDelete.timer), [pendingDelete]);
+
+  async function commitDelete(id: string) {
+    try {
+      await deleteChildPedigree(id);
+      setRows((prev) => prev?.filter((r) => r.id !== id));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Delete failed');
+    }
+  }
+
+  /** End the undo window early by going through with the delete. */
+  function flushPendingDelete() {
+    const p = pendingRef.current;
+    if (!p) return;
+    clearTimeout(p.timer);
+    pendingRef.current = null;
+    void commitDelete(p.id);
+  }
+
+  // Leaving the page commits a pending delete rather than dropping it. This
+  // effect deliberately has an empty dependency list and reads the ref, so
+  // it only ever fires on real unmount.
+  useEffect(() => {
+    const onUnload = () => {
+      const p = pendingRef.current;
+      if (p) {
+        clearTimeout(p.timer);
+        pendingRef.current = null;
+        // A normal fetch is abandoned when the page goes away; keepalive
+        // survives it.
+        deleteChildPedigreeKeepalive(p.id);
+      }
+    };
+    window.addEventListener('beforeunload', onUnload);
+    return () => {
+      window.removeEventListener('beforeunload', onUnload);
+      flushPendingDelete();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function handleDelete(id: string, label: string) {
-    // Hide immediately, but hold the actual DELETE call for a few seconds
-    // so the button can say "Undo" and mean it.
-    setPendingDelete((prev) => {
-      if (prev) clearTimeout(prev.timer);
-      return prev;
-    });
-    const timer = setTimeout(async () => {
-      try {
-        await deleteChildPedigree(id);
-        setRows((prev) => prev?.filter((r) => r.id !== id));
-      } catch (e) {
-        setError(e instanceof Error ? e.message : 'Delete failed');
-      } finally {
-        setPendingDelete((cur) => (cur?.id === id ? undefined : cur));
-      }
+    // A second delete commits the first rather than cancelling it — the
+    // operator asked for both.
+    flushPendingDelete();
+    const timer = setTimeout(() => {
+      pendingRef.current = null;
+      setPendingDelete((cur) => (cur?.id === id ? undefined : cur));
+      void commitDelete(id);
     }, UNDO_WINDOW_MS);
-    setPendingDelete({ id, label, timer });
+    pendingRef.current = { id, label, timer };
+    setPendingDelete({ id, label });
   }
 
   function undoDelete() {
-    if (!pendingDelete) return;
-    clearTimeout(pendingDelete.timer);
+    const p = pendingRef.current;
+    if (!p) return;
+    clearTimeout(p.timer);
+    pendingRef.current = null;
     setPendingDelete(undefined);
   }
 
