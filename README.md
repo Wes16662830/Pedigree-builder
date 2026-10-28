@@ -1,8 +1,5 @@
 # OudeLuck Pedigree Builder
 
-> This repo also holds **OLR Scout** (auction decision app), a separate app in
-> [`olr-scout/`](olr-scout/README.md).
-
 Local tool for OudeLuck Lofts (OneLoft Genetics), Athlone Farm, Tarkastad,
 Eastern Cape. Upload two parent pedigrees — any loft, any format, image or
 PDF — and produce a branded, editable OudeLuck pedigree for the child bird.
